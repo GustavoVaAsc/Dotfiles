@@ -44,6 +44,20 @@ return {
                 }
             end
 
+            -- C++: Configure for GNU G++ competitive programming
+            if server == "clangd" then
+                opts.filetypes = { "c", "cpp" }
+                opts.settings = {
+                    clangd = {
+                        fallbackEdition = "c++17",
+                    },
+                }
+                opts.init_options = {
+                    clangdFileStatuses = true,
+                }
+                opts.autostart = true
+            end
+
             -- [CHANGED] Use the native Neovim 0.11+ API
             -- This registers the config and enables the server for relevant filetypes
             vim.lsp.config(server, opts)
