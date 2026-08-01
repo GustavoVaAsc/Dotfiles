@@ -1,0 +1,9 @@
+# Build / install artifacts (defensive — the package has no build step,
+# but npm may leave these behind during local testing)
+node_modules/
+*.log
+.DS_Store
+
+# Local install verification (created by `npm install` for testing)
+.tmp/
+.verify/

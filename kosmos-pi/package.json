@@ -1,0 +1,52 @@
+{
+  "name": "kosmos-pi",
+  "version": "0.1.0",
+  "description": "Portable Pi package shipping the kosmos-* agent team and supporting skills — senior engineering specialists (code reviewer, security auditor, docs writer, routine and pro coders, orchestrator) plus PR workflow and dual-lens verdict skills.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "subagents",
+    "agents",
+    "skills",
+    "kosmos",
+    "code-review",
+    "security-audit",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "agents/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "pi-subagents": "*"
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "pi-subagents": {
+    "agents": [
+      "./agents"
+    ]
+  },
+  "author": {
+    "name": "time_traveler"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/time_traveler/kosmos-pi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/time_traveler/kosmos-pi/issues"
+  },
+  "homepage": "https://github.com/time_traveler/kosmos-pi#readme"
+}
