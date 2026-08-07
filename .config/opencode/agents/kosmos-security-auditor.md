@@ -1,7 +1,7 @@
 ---
 description: Audits code and configuration for security vulnerabilities — injection, authn/authz flaws, secrets, crypto, supply chain, and OWASP Top 10
 mode: subagent
-model: minimax-coding-plan/MiniMax-M3
+model: minimax/MiniMax-M3
 temperature: 0.1
 permission:
   edit: deny

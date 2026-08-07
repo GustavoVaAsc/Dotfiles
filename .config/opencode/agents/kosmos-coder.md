@@ -1,7 +1,7 @@
 ---
 description: Implements features and fixes bugs by writing code, matching project conventions, and verifying with the project's own test, lint, and typecheck commands
 mode: subagent
-model: minimax-coding-plan/MiniMax-M2.7
+model: minimax/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: allow

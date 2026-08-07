@@ -1,7 +1,7 @@
 ---
 description: Writes and maintains project documentation — READMEs, API references, guides, tutorials, architecture docs, and changelogs
 mode: subagent
-model: minimax-coding-plan/MiniMax-M2.5
+model: minimax/MiniMax-M2.5
 temperature: 0.3
 permission:
   bash: deny

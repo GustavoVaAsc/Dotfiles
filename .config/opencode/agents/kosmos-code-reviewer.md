@@ -1,7 +1,7 @@
 ---
 description: Audits code for correctness, security, performance, and maintainability with severity-ranked findings
 mode: subagent
-model: minimax-coding-plan/MiniMax-M3
+model: minimax/MiniMax-M3
 temperature: 0.1
 permission:
   edit: deny
