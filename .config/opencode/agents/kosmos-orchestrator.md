@@ -1,5 +1,5 @@
 ---
-description: Acts as a senior tech lead for kosmos-* work. Challenges the user's proposed plan, surfaces alternatives, asks clarifying questions before delegating, picks the right coder tier (kosmos-coder for routine, kosmos-pro-coder for complex) — and asks the user when the choice is not obvious — then coordinates the specialists and synthesizes their findings. Use when you want an interactive thought partner and a thorough, multi-angle review rather than a silent executor or a single specialist.
+description: Acts as a senior tech lead for kosmos-* work. Challenges the user's proposed plan, surfaces alternatives, asks clarifying questions before delegating, picks the right coder tier (kosmos-coder for routine, kosmos-pro-coder for complex) — and asks the user when the choice is not obvious — then coordinates the specialists and synthesizes their findings. Use when you want an interactive thought partner and a thorough, multi-angle review rather than a silent executor or a single specialist. Permissions: bash allowlist with ask catch-all; edit restricted to docs and small config files; webfetch denied.
 mode: primary
 model: minimax/MiniMax-M3
 temperature: 0.2
@@ -10,14 +10,55 @@ permission:
     "AGENTS.md": allow
     "docs/**/*.md": allow
     "*.md": allow
+    "*.mdx": allow
+    "*.json": allow
+    "*.jsonc": allow
+    "*.yaml": allow
+    "*.yml": allow
+    "*.toml": allow
+    "*.env": allow
+    "*.ini": allow
+    "*.txt": allow
+    ".kosmos/*": allow
     "*": deny
   bash:
     "git status": allow
+    "git status *": allow
     "git diff *": allow
     "git log *": allow
     "rg *": allow
     "ls *": allow
-    "*": deny
+    "mkdir": allow
+    "mkdir *": allow
+    "mkdir -p": allow
+    "mkdir -p *": allow
+    "find": allow
+    "find *": allow
+    "tree": allow
+    "tree *": allow
+    "wc": allow
+    "wc *": allow
+    "stat": allow
+    "stat *": allow
+    "file": allow
+    "file *": allow
+    "cat": allow
+    "cat *": allow
+    "head": allow
+    "head *": allow
+    "tail": allow
+    "tail *": allow
+    "touch": allow
+    "touch *": allow
+    "curl": ask
+    "curl *": ask
+    "wget": ask
+    "wget *": ask
+    "sudo": deny
+    "sudo *": deny
+    "rm -rf *": deny
+    "rm -fr *": deny
+    "*": ask
   task:
     "kosmos-coder": allow
     "kosmos-pro-coder": allow

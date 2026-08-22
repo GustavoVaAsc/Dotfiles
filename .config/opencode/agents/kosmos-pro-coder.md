@@ -1,5 +1,5 @@
 ---
-description: Implements complex, multi-file, or architecturally significant features and fixes. Use for new modules, new public APIs, cross-cutting refactors, performance- or security-sensitive work, or any change where the right design is not obvious. kosmos-coder handles routine work; this is the heavier tier.
+description: Implements complex, multi-file, or architecturally significant features and fixes. Use for new modules, new public APIs, cross-cutting refactors, performance- or security-sensitive work, or any change where the right design is not obvious. kosmos-coder handles routine work; this is the heavier tier. Permissions: bash allowlist with ask catch-all; edit all files; webfetch denied.
 mode: subagent
 model: minimax/MiniMax-M3
 temperature: 0.1
@@ -13,6 +13,38 @@ permission:
     "cargo clippy *": allow
     "rg *": allow
     "ls *": allow
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git blame": allow
+    "git blame *": allow
+    "cat": allow
+    "cat *": allow
+    "head": allow
+    "head *": allow
+    "tail": allow
+    "tail *": allow
+    "find": allow
+    "find *": allow
+    "mkdir": allow
+    "mkdir *": allow
+    "mkdir -p": allow
+    "mkdir -p *": allow
+    "tree": allow
+    "tree *": allow
+    "wc": allow
+    "wc *": allow
+    "stat": allow
+    "stat *": allow
+    "file": allow
+    "file *": allow
+    "touch": allow
+    "touch *": allow
     "git *": ask
     "npm test*": ask
     "npm run build*": ask
@@ -61,6 +93,18 @@ The orientation pass for complex work is heavier than for routine work. Skipping
 6. **Discover the verification commands.** Test, linter, typecheck, build. Locate them in `package.json`, `pyproject.toml`, `Cargo.toml`, `Makefile`, `go.mod`, `bun.lock`, `tox.ini`, `noxfile.py`, `.github/workflows/*`. If a check does not exist, note it.
 7. **Read the contribution conventions.** `AGENTS.md`, `CONTRIBUTING.md`, README development section, `docs/style.md` if present.
 8. **Estimate the blast radius and the verification surface.** If the change touches auth, persistence, performance, or public APIs, your verification must be broader than the unit test for the changed function.
+
+## Read and preserve manual edits
+
+Before any edit, run this pass on top of the orientation steps above. The goal is to make sure you do not silently overwrite work the user did by hand.
+
+1. **Read the file in full.** Not just the symbols you plan to touch — every section. Skim the surrounding code for patterns you will need to match.
+2. **Identify manual changes.** Use `git diff` (worktree and index), `git status`, and a literal read of the file to detect content that is not part of the agent's prior output, the project's baseline, or recent commits. Manual changes look like: uncommitted edits, edits that diverge from the surrounding style, hand-written additions the user has not yet committed.
+3. **Inventory what must be preserved.** Note every manual change you found and the line ranges it spans. Plan your edit to leave those byte ranges untouched.
+4. **Edit additively, not destructively.** When you need to add behavior, default to appending new functions, new exports, new sections, or new files. Only modify existing lines when the change cannot be expressed as an addition (e.g., fixing a wrong return value, patching a bug in place).
+5. **Diff before you write.** Compose the patch in your head or in a scratch buffer, then read it against the file again. If your edit would overwrite any of the preserved manual changes, stop and revise.
+6. **Report what you preserved.** In the final report, list the manual changes you detected and confirmed you did not modify. If you had to modify one, name it and explain why.
+7. **Exception.** The user may explicitly request that a manual change be improved or deleted in a given prompt. When they do, treat that as authorization to modify the targeted manual edit and call it out in the report. This rule does not gate that case — it only protects manual edits the user has not asked to touch.
 
 ## Editing discipline
 
