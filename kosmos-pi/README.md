@@ -10,12 +10,14 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 | Agent | Tier | Mode | Purpose |
 |---|---|---|---|
-| `kosmos-coder` | MiniMax-M2.7 | read/write, medium thinking | Routine implementation: small diffs, clear existing patterns, single file or small file set |
-| `kosmos-pro-coder` | MiniMax-M3 | read/write, high thinking | Complex work: new modules, public APIs, cross-cutting refactors, perf/security-sensitive changes |
-| `kosmos-code-reviewer` | MiniMax-M3 | read-only, high thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
-| `kosmos-security-auditor` | MiniMax-M3 | read-only, high thinking | 15-layer threat model + OWASP-focused security audit |
-| `kosmos-docs-writer` | MiniMax-M2.5 | read-only, medium thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
-| `kosmos-orchestrator` | MiniMax-M3 | read-only, high thinking | Senior tech-lead: challenges the plan, picks the right coder tier, fans out specialists in parallel via `subagent(...)` |
+| `kosmos.coder` | MiniMax-M2.7 | read/write, medium thinking | Routine implementation: small diffs, clear existing patterns, single file or small file set |
+| `kosmos.pro-coder` | MiniMax-M3 | read/write, high thinking | Complex work: new modules, public APIs, cross-cutting refactors, perf/security-sensitive changes |
+| `kosmos.code-reviewer` | MiniMax-M3 | read-only, high thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
+| `kosmos.security-auditor` | MiniMax-M3 | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit |
+| `kosmos.docs-writer` | MiniMax-M2.5 | read-only, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
+| `kosmos.orchestrator` | MiniMax-M3 | read-only, high thinking | Senior tech-lead: challenges the plan, picks the right coder tier, fans out specialists in parallel via `subagent(...)` |
+
+Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
 
 ### Skills (2)
 
@@ -26,9 +28,25 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 ## Install
 
+Run the install script once on each machine:
+
+```bash
+~/Dotfiles/bin/install-kosmos-pi.sh
+```
+
+The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the full source):
+
+1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
+2. Adds `"npm:kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
+3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
+4. Syncs `~/Dotfiles/config/mcp/` → `~/.config/mcp/` (`mcp.json` only).
+5. Reports what changed. Safe to re-run.
+
+After running it, restart Pi. The 6 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
+
 ### From npm (after publishing)
 
-Add to your `~/.pi/agent/settings.json`:
+If you prefer to install from npm rather than a local checkout, add to `~/.pi/agent/settings.json`:
 
 ```json
 {
@@ -36,7 +54,7 @@ Add to your `~/.pi/agent/settings.json`:
 }
 ```
 
-Then restart Pi. The 6 agents and 2 skills appear automatically.
+Then restart Pi.
 
 ### From a local checkout (for development)
 
@@ -46,7 +64,7 @@ Then restart Pi. The 6 agents and 2 skills appear automatically.
 }
 ```
 
-Relative paths work too if you keep the package inside your Pi project or dotfiles repo:
+Relative paths work too if the package is inside your Pi project or dotfiles repo:
 
 ```json
 {
@@ -54,7 +72,19 @@ Relative paths work too if you keep the package inside your Pi project or dotfil
 }
 ```
 
-After restarting Pi, run `/agents` to confirm the kosmos-* agents are loaded, and `/skill:pr-workflow` (or `/skill:the-cock-of-justice`) to invoke a skill.
+## Portable config tree
+
+Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
+
+- `pi/agent/` — Pi agent-level settings:
+  - `SYSTEM.md` — parent system prompt injected into all Pi sessions
+  - `settings.json` — user preferences, theme, default model, packages list
+  - `themes/kosmos.json` — custom theme
+  - `mcp.json` — per-agent MCP server definitions
+- `config/mcp/` — global MCP config:
+  - `mcp.json` — globally available MCP servers
+
+Re-capture after editing live Pi config (e.g., after changing theme or adding an MCP server). The install script's per-file/per-subtree rsync is intentional: syncing `pi/agent/SYSTEM.md` alone does not wipe `~/.pi/agent/sessions/`, `npm/`, or other Pi state that lives alongside it.
 
 ## Usage
 
@@ -64,20 +94,20 @@ From the parent Pi session, use the `subagent(...)` tool (from the `pi-subagents
 
 ```typescript
 subagent({
-  agent: "kosmos-code-reviewer",
+  agent: "kosmos.code-reviewer",
   task: "Review the diff in src/auth/login.ts for the last 3 commits."
 })
 ```
 
-The `agent` name is the unprefixed local name. Pi resolves it through its discovery chain (built-in → user → project → package).
+Pi resolves the `agent` name through its discovery chain (built-in → user → project → package). The `package: kosmos` frontmatter field tells Pi which package to look in when the name is not globally unique.
 
 ### Orchestrating multi-agent work
 
-The `kosmos-orchestrator` agent is meant to be invoked by the parent session. It will:
+The `kosmos.orchestrator` agent is meant to be invoked by the parent session. It will:
 
 1. Challenge your proposed plan and surface alternatives.
 2. Ask clarifying questions if scope or approach is ambiguous.
-3. Pick the right coder tier (`kosmos-coder` vs `kosmos-pro-coder`) based on signals, not safety.
+3. Pick the right coder tier (`kosmos.coder` vs `kosmos.pro-coder`) based on signals, not safety.
 4. Fan out specialists in parallel via `subagent(tasks: [...])`.
 5. Synthesize their findings into one consolidated report with a ship verdict.
 
@@ -85,7 +115,7 @@ A typical invocation:
 
 ```typescript
 subagent({
-  agent: "kosmos-orchestrator",
+  agent: "kosmos.orchestrator",
   task: "Plan and review the change in src/billing/. Branch: feat/usage-based-pricing. Goal: tier-based pricing with metered overages."
 })
 ```
@@ -101,26 +131,47 @@ When the user asks for "the cock of justice", a "verdict", or wants a hard go / 
 ## Project layout
 
 ```
-kosmos-pi/
-├── package.json              # pi + pi-subagents manifest
-├── README.md
-├── LICENSE
-├── .npmignore
-├── agents/                   # Declared under pi-subagents.agents
-│   ├── kosmos-code-reviewer.md
-│   ├── kosmos-coder.md
-│   ├── kosmos-docs-writer.md
-│   ├── kosmos-orchestrator.md
-│   ├── kosmos-pro-coder.md
-│   └── kosmos-security-auditor.md
-└── skills/                   # Declared under pi.skills
-    ├── pr-workflow/
-    │   └── SKILL.md
-    └── the-cock-of-justice/
-        └── SKILL.md
+Dotfiles/
+├── bin/
+│   └── install-kosmos-pi.sh   # Idempotent installer
+├── config/
+│   └── mcp/
+│       └── mcp.json           # Global MCP server config
+├── pi/
+│   └── agent/
+│       ├── SYSTEM.md          # Parent system prompt
+│       ├── settings.json       # User preferences, theme, packages
+│       ├── mcp.json           # Per-agent MCP servers
+│       └── themes/
+│           └── kosmos.json    # Custom theme
+└── kosmos-pi/                 # The Pi package
+    ├── package.json           # pi + pi-subagents manifest
+    ├── README.md
+    ├── LICENSE
+    ├── agents/                # Declared under pi-subagents.agents
+    │   ├── orchestrator.md
+    │   ├── coder.md
+    │   ├── pro-coder.md
+    │   ├── code-reviewer.md
+    │   ├── security-auditor.md
+    │   └── docs-writer.md
+    └── skills/               # Declared under pi.skills
+        ├── pr-workflow/
+        │   └── SKILL.md
+        └── the-cock-of-justice/
+            └── SKILL.md
 ```
 
-Each agent is a single Markdown file with YAML frontmatter (`name`, `description`, `model`, `thinking`, `tools`, `acceptanceRole`, etc.) and a system prompt body. Each skill follows the [Agent Skills standard](https://agentskills.io/specification): a directory containing `SKILL.md` with `name` + `description` frontmatter and instructions.
+Agent files use YAML frontmatter (`name`, `package`, `description`, `model`, `thinking`, `tools`, `acceptanceRole`, etc.) with the body as the system prompt. Skills follow the [Agent Skills standard](https://agentskills.io/specification): a directory containing `SKILL.md` with `name` + `description` frontmatter and instructions.
+
+### Naming convention
+
+Agent files live under `agents/` without a `kosmos-` prefix. The runtime name is formed from `package:` + `name:` in frontmatter:
+
+- `package: kosmos`, `name: coder` → `kosmos.coder`
+- `package: kosmos`, `name: orchestrator` → `kosmos.orchestrator`
+
+This keeps the filenames short while avoiding namespace collisions with other packages.
 
 ### Why two manifest keys?
 
@@ -142,7 +193,7 @@ These agents were ported from OpenCode (`.config/opencode/agents/*.md`) to Pi's 
 | `model: provider/X` | `model: X` (Pi uses `defaultProvider` from settings) |
 | `color`, `webfetch` | Removed (cosmetic / non-equivalent) |
 
-Skills were ported from `~/.config/opencode/skills/*/SKILL.md` to Pi's `~/.pi/agent/skills/` global skill directory. The bodies are largely the same; the only meaningful changes replace OpenCode's `task` tool with Pi's `subagent(...)` tool and note the parent-spawns-children model.
+Skills were ported from `~/.config/opencode/skills/*/SKILL.md` to the package's `skills/` directory. The bodies are largely the same; the only meaningful changes replace OpenCode's `task` tool with Pi's `subagent(...)` tool and note the parent-spawns-children model.
 
 ## Publishing
 
@@ -177,7 +228,7 @@ node --experimental-strip-types --no-warnings -e "
 "
 ```
 
-All agents must have a `name` matching `^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$` and a `description` under 1024 chars. All skills follow the same constraints.
+All agents must have a `name` and a `description` under 1024 chars. All skills follow the same constraints.
 
 ## License
 
