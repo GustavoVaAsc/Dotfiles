@@ -2,7 +2,7 @@
 name: docs-writer
 package: kosmos
 description: Writes and maintains project documentation — READMEs, API references, guides, tutorials, architecture docs, and changelogs. Tools: edit/write restricted to docs+assets, bash denied, web tools allowed.
-model: minimax/MiniMax-M2.5
+model: minimax/MiniMax-M2.7
 thinking: low
 systemPromptMode: replace
 inheritProjectContext: true

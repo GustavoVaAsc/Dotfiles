@@ -14,7 +14,7 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 | `kosmos.pro-coder` | MiniMax-M3 | read/write, high thinking | Complex work: new modules, public APIs, cross-cutting refactors, perf/security-sensitive changes |
 | `kosmos.code-reviewer` | MiniMax-M3 | read-only, high thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
 | `kosmos.security-auditor` | MiniMax-M3 | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit |
-| `kosmos.docs-writer` | MiniMax-M2.5 | read-only, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
+| `kosmos.docs-writer` | MiniMax-M2.7 | read-only, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
 | `kosmos.orchestrator` | MiniMax-M3 | read-only, high thinking | Senior tech-lead: challenges the plan, picks the right coder tier, fans out specialists in parallel via `subagent(...)` |
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
