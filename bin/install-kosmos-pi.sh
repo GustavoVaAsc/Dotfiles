@@ -11,10 +11,12 @@
 #   2. Runs `npm install <pkg>` into ~/.pi/agent/npm/ (Pi's user package dir).
 #   3. Adds "npm:kosmos-pi" to ~/.pi/agent/settings.json packages if missing.
 #   4. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
-#      themes/, mcp.json). Scoped per-file/per-subtree so Pi's other state
+#      themes/, extensions/, mcp.json). Scoped per-file/per-subtree so Pi's other state
 #      (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
-#   5. Syncs ~/Dotfiles/config/mcp/ into ~/.config/mcp/ (global MCP config).
-#   6. Reports what changed. Exits non-zero on real failures.
+#   5. Syncs Pi extensions (.ts files under pi/agent/extensions/) into
+#      ~/.pi/agent/extensions/. Same per-subtree rsync as themes/.
+#   6. Syncs ~/Dotfiles/config/mcp/ into ~/.config/mcp/ (global MCP config).
+#   7. Reports what changed. Exits non-zero on real failures.
 #
 # Safe to re-run: npm install is a no-op when already installed; settings.json
 # is patched via Python (json.load/dump) so formatting is preserved; the rsyncs
@@ -107,6 +109,7 @@ if [ ! -d "$PI_AGENT_SRC" ]; then
 fi
 
 mkdir -p "$PI_AGENT_DST/themes"
+mkdir -p "$PI_AGENT_DST/extensions"
 
 for entry in SYSTEM.md settings.json mcp.json; do
 	if [ ! -e "$PI_AGENT_SRC/$entry" ]; then
@@ -125,6 +128,13 @@ if rsync -a --delete "$PI_AGENT_SRC/themes/" "$PI_AGENT_DST/themes/" >/dev/null 
 	echo "  ✓ synced ~/.pi/agent/themes/"
 else
 	echo "error: rsync failed for themes/" >&2
+	exit 1
+fi
+
+if rsync -a --delete "$PI_AGENT_SRC/extensions/" "$PI_AGENT_DST/extensions/" >/dev/null 2>&1; then
+	echo "  ✓ synced ~/.pi/agent/extensions/"
+else
+	echo "error: rsync failed for extensions/" >&2
 	exit 1
 fi
 

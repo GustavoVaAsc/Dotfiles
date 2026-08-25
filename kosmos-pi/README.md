@@ -81,6 +81,7 @@ Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
   - `settings.json` — user preferences, theme, default model, packages list
   - `themes/kosmos.json` — custom theme
   - `mcp.json` — per-agent MCP server definitions
+  - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it alongside the active model in the TUI footer and terminal title
 - `config/mcp/` — global MCP config:
   - `mcp.json` — globally available MCP servers
 
