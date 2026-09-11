@@ -39,7 +39,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
 2. Adds `"npm:kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
 3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
-4. Syncs `~/Dotfiles/config/mcp/` → `~/.config/mcp/` (`mcp.json` only).
+4. Syncs `~/Dotfiles/mcp/` → `~/.config/mcp/` (`mcp.json` only).
 5. Reports what changed. Safe to re-run.
 
 After running it, restart Pi. The 6 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
@@ -82,7 +82,7 @@ Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
   - `themes/kosmos.json` — custom theme
   - `mcp.json` — per-agent MCP server definitions
   - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it alongside the active model in the TUI footer and terminal title
-- `config/mcp/` — global MCP config:
+- `mcp/` — global MCP config:
   - `mcp.json` — globally available MCP servers
 
 Re-capture after editing live Pi config (e.g., after changing theme or adding an MCP server). The install script's per-file/per-subtree rsync is intentional: syncing `pi/agent/SYSTEM.md` alone does not wipe `~/.pi/agent/sessions/`, `npm/`, or other Pi state that lives alongside it.

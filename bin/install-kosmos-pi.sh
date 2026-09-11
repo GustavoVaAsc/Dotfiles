@@ -15,8 +15,7 @@
 #      (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
 #   5. Syncs Pi extensions (.ts files under pi/agent/extensions/) into
 #      ~/.pi/agent/extensions/. Same per-subtree rsync as themes/.
-#   6. Syncs ~/Dotfiles/config/mcp/ into ~/.config/mcp/ (global MCP config).
-#   7. Reports what changed. Exits non-zero on real failures.
+#   6. Reports what changed. Exits non-zero on real failures.
 #
 # Safe to re-run: npm install is a no-op when already installed; settings.json
 # is patched via Python (json.load/dump) so formatting is preserved; the rsyncs
@@ -135,30 +134,6 @@ if rsync -a --delete "$PI_AGENT_SRC/extensions/" "$PI_AGENT_DST/extensions/" >/d
 	echo "  ✓ synced ~/.pi/agent/extensions/"
 else
 	echo "error: rsync failed for extensions/" >&2
-	exit 1
-fi
-
-# --- sync global MCP config into ~/.config/mcp/ -------------------------------
-
-MCP_SRC="$DOTFILES_DIR/config/mcp"
-MCP_DST="${HOME}/.config/mcp"
-MCP_FILE="mcp.json"
-
-if [ ! -d "$MCP_SRC" ]; then
-	echo "error: global MCP config tree not found at $MCP_SRC" >&2
-	exit 1
-fi
-
-mkdir -p "$MCP_DST"
-
-if [ ! -e "$MCP_SRC/$MCP_FILE" ]; then
-	echo "error: missing portable config file: $MCP_SRC/$MCP_FILE" >&2
-	exit 1
-fi
-if rsync -a --delete "$MCP_SRC/$MCP_FILE" "$MCP_DST/$MCP_FILE" >/dev/null 2>&1; then
-	echo "  ✓ synced ~/.config/mcp/$MCP_FILE"
-else
-	echo "error: rsync failed for $MCP_FILE" >&2
 	exit 1
 fi
 
