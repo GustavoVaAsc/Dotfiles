@@ -31,7 +31,7 @@ Use a single `workflowScript` with stable keys when fanning out in parallel.
   (web research), `delegate` (parent-model passthrough).
 
 The full methodology for each specialist lives at
-`~/.pi/agent/agents/kosmos/<name>.md` — read it before delegating if the work
+`~/.pi/agent/npm/node_modules/kosmos-pi/agents/<name>.md` — read it before delegating if the work
 strays from the default patterns above.
 
 ## Operating procedure (lead mode)

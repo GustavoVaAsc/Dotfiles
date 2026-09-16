@@ -9,6 +9,6 @@
     "npm:pi-web-access",
     "npm:pi-subagents",
     "npm:@juicesharp/rpiv-todo",
-    "npm:kosmos-pi"
+    "file:/home/kosmos/Dotfiles/kosmos-pi"
   ]
 }

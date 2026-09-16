@@ -37,7 +37,7 @@ Run the install script once on each machine:
 The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the full source):
 
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
-2. Adds `"npm:kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
+2. Adds `"file:/home/kosmos/Dotfiles/kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
 3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
 4. Syncs `~/Dotfiles/mcp/` → `~/.config/mcp/` (`mcp.json` only).
 5. Reports what changed. Safe to re-run.
@@ -60,7 +60,7 @@ Then restart Pi.
 
 ```json
 {
-  "packages": ["npm:/absolute/path/to/Dotfiles/kosmos-pi"]
+  "packages": ["file:/absolute/path/to/Dotfiles/kosmos-pi"]
 }
 ```
 
@@ -68,7 +68,7 @@ Relative paths work too if the package is inside your Pi project or dotfiles rep
 
 ```json
 {
-  "packages": ["npm:./kosmos-pi"]
+  "packages": ["file:./kosmos-pi"]
 }
 ```
 

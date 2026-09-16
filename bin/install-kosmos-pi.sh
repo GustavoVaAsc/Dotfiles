@@ -9,7 +9,7 @@
 # What it does:
 #   1. Locates the kosmos-pi package relative to this script.
 #   2. Runs `npm install <pkg>` into ~/.pi/agent/npm/ (Pi's user package dir).
-#   3. Adds "npm:kosmos-pi" to ~/.pi/agent/settings.json packages if missing.
+#   3. Adds "file:$PKG_DIR" to ~/.pi/agent/settings.json packages if missing.
 #   4. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
 #      themes/, extensions/, mcp.json). Scoped per-file/per-subtree so Pi's other state
 #      (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
@@ -71,7 +71,7 @@ if [ ! -f "$SETTINGS" ]; then
 	exit 1
 fi
 
-ENTRY="npm:$PKG_NAME"
+ENTRY="file:$PKG_DIR"
 python3 - "$SETTINGS" "$ENTRY" <<'PY'
 import json, sys, pathlib
 
