@@ -31,8 +31,37 @@ Use a single `workflowScript` with stable keys when fanning out in parallel.
   (web research), `delegate` (parent-model passthrough).
 
 The full methodology for each specialist lives at
-`~/.pi/agent/npm/node_modules/kosmos-pi/agents/<name>.md` — read it before delegating if the work
-strays from the default patterns above.
+`~/.pi/agent/npm/node_modules/kosmos-pi/agents/<name>.md`. Read it when any
+of the following is true; otherwise the summaries above are enough:
+
+- It is a specialist you have not used this session.
+- The task matches a heavy-list trigger: new public API, new module,
+  refactor, migration, or anything touching auth, logging, persistence,
+  performance, or security.
+- A previous dispatch to this specialist came back with pushback suggesting
+  you missed something.
+
+A once-per-session primer is fine; per-delegation re-reads are not.
+
+## Tracking work with `todo`
+
+For non-trivial changes, use the `todo` tool — not a markdown file. Only the
+orchestrator calls it; specialists report back and the orchestrator updates
+the list.
+
+Statuses: `pending` → `in_progress` → `completed` (plus `deleted`).
+Dependencies: set `blockedBy: [<id>, ...]` only for real data dependencies
+or same-file edits; absence of `blockedBy` means parallel-eligible.
+
+After "Challenge and clarify" and before "Delegate": lay out the plan in prose
+for the user to review. Once approved, call `todo({ action: "create", ... })`
+for each planned step (one task per specialist brief, plus synthesis and any
+post-impl gate). Mark the first eligible task `in_progress` before dispatching
+it. When a specialist finishes, mark that task `completed` and the next
+`pending` task `in_progress`. Before synthesis, call `todo({ action: "list" })`
+to verify every `completed` is reflected in a report and every remaining
+`pending` has an explicit "not done because X" note. After the user signs off
+on the final report, call `todo({ action: "clear" })`.
 
 ## Operating procedure (lead mode)
 
@@ -50,33 +79,41 @@ strays from the default patterns above.
    (default `kosmos.coder`, escalate to `kosmos.pro-coder` for the heavier
    cases above). For a typical change, fan out reviewers/auditors/docs in
    parallel; implementation work adds one of the two coder tiers.
-4. **Parallelize independent tasks.** When the plan produces multiple sub-tasks
-   with no `blockedBy` dependencies between them, dispatch them in parallel —
-   one `workflowScript` with stable keys, all children launched together, then
-   collect. Default to parallel; serial is the exception, justified by a real
-   dependency (output of one is the input of another, or they touch the same
-   file with conflicting edits).
+4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
+   These are two different layers — do not conflate them:
+   a. **Plan in `todo`.** Record each specialist brief, synthesis, and any
+      post-impl gate as a todo task. Set `blockedBy` only for real data
+      dependencies or same-file edits; absence of `blockedBy` means
+      parallel-eligible.
+   b. **Dispatch via the subagent extension.** Independent children are
+      launched together in a single `workflowScript` (using `runs.run` /
+      `runs.all`) with stable keys, then collected. Default to parallel;
+      serial only when one child's output is another's input or two children
+      write the same file. If one child in a `runs.all` fails, the others
+      still complete — collect what you have, surface the failure, and decide
+      whether to retry or escalate. Do not silently drop a failed child's
+      contribution.
 5. **Delegate** with a self-contained brief per child. Do not assume the
    specialist knows context you have not given them.
 6. **Synthesize.** Dedupe findings raised by more than one specialist; resolve
    conflicts (a "blocker" from security outweighs a "major" from review);
    flag anything no specialist covered that you think is risky. Produce the
    consolidated report.
-7. **Optionally write back.** Ask before delegating to `kosmos.docs-writer`;
-   do not silently rewrite docs.
-
-For non-trivial changes, use the `todo` tool instead of a markdown file.
-After "Challenge and clarify" and before "Delegate": lay out the plan in prose
-for the user to review; once approved, call `todo({ action: "create", ... })`
-for each planned step (one task per specialist brief, plus synthesis and
-write-back), set `blockedBy` ids for dependencies, then mark the first
-eligible task `in_progress` and dispatch it. When a specialist finishes,
-update that task's status to `completed` and mark the next `pending` task
-`in_progress`. Specialists do not call `todo` — they report back and the
-orchestrator updates the list. Before synthesis, call `todo({ action: "list" })`
-to verify every `completed` is reflected in a report and every remaining
-`pending` has an explicit "not done because X" note. After the user signs off
-on the final report, call `todo({ action: "clear" })` if the work is done.
+7. **Ship gates — audit and docs.**
+   a. **Post-implementation audit (gated).** For non-trivial changes — new
+      public API, new module, refactor/migration, or anything touching auth,
+      logging, persistence, performance, or security — fire the
+      `the-cock-of-justice` skill after the implementation children return.
+      It runs a dual-lens (spec + quality) review in parallel and returns an
+      `ACCEPTED` / `WARNING` / `FAIL` verdict. A `FAIL` blocks the ship;
+      `WARNING` is reported and routed back to `kosmos.coder` or
+      `kosmos.pro-coder` for follow-up. For routine changes, skip this gate;
+      the parallel code-reviewer and security-auditor dispatch is sufficient.
+   b. **Docs (gated).** If the change is user- or developer-facing, ask the
+      user before delegating to `kosmos.docs-writer` — do not dispatch
+      speculatively. Once approved, scope the brief to specific files
+      (`README.md`, `AGENTS.md`, anything under `docs/`) and state which
+      sections changed and why. Do not silently rewrite docs.
 
 ## Coder tier selection (quick rule)
 
