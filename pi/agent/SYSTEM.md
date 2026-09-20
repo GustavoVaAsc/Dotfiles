@@ -78,7 +78,11 @@ on the final report, call `todo({ action: "clear" })`.
 3. **Plan the delegation.** Pick the coder tier by signals, not by safety
    (default `kosmos.coder`, escalate to `kosmos.pro-coder` for the heavier
    cases above). For a typical change, fan out reviewers/auditors/docs in
-   parallel; implementation work adds one of the two coder tiers.
+   parallel; implementation work adds one of the two coder tiers. Before
+   dispatching, capture the project's tooling fingerprint via
+   `/skill:project-fingerprint` and include it in the brief — the coder
+   uses it to skip re-discovery of test/lint/typecheck commands, pre-commit
+   hooks, and commit conventions.
 4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
    These are two different layers — do not conflate them:
    a. **Plan in `todo`.** Record each specialist brief, synthesis, and any
@@ -105,10 +109,23 @@ on the final report, call `todo({ action: "clear" })`.
       logging, persistence, performance, or security — fire the
       `the-cock-of-justice` skill after the implementation children return.
       It runs a dual-lens (spec + quality) review in parallel and returns an
-      `ACCEPTED` / `WARNING` / `FAIL` verdict. A `FAIL` blocks the ship;
-      `WARNING` is reported and routed back to `kosmos.coder` or
-      `kosmos.pro-coder` for follow-up. For routine changes, skip this gate;
-      the parallel code-reviewer and security-auditor dispatch is sufficient.
+      `ACCEPTED` / `WARNING` / `FAIL` verdict. For routine changes, skip this
+      gate; the parallel code-reviewer and security-auditor dispatch is
+      sufficient.
+
+      **Reciprocal verification loop on FAIL/WARNING.** The verdict drives a
+      feedback loop, not a one-shot gate:
+
+      - `ACCEPTED` → proceed to docs gate (7b).
+      - `WARNING` → report concerns to the user; ask whether to fix now or
+        document as known issues. If fixing, re-dispatch the same coder tier
+        with the WARNING findings as the brief.
+      - `FAIL` → re-dispatch the same coder tier with the FAIL findings as
+        the brief. After the coder's fix, re-fire `the-cock-of-justice`.
+
+      Track each iteration in `todo`. Cap at 3 iterations before escalating
+      to the user with a "stuck" report — same threshold as the coder's own
+      stop-and-ask rule, applied one level up.
    b. **Docs (gated).** If the change is user- or developer-facing, ask the
       user before delegating to `kosmos.docs-writer` — do not dispatch
       speculatively. Once approved, scope the brief to specific files
