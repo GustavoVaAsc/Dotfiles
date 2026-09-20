@@ -90,10 +90,18 @@ Verification is part of the task, not an optional step. Do not report "done" wit
 
 1. **Run the discovered commands.** Test, linter, typecheck — in that order. Capture the actual exit code and a representative slice of output.
 2. **Read the failures, not just the summary.** A red test means a real failure. Investigate, do not paraphrase it away.
-3. **Iterate until green or until you can explain why you cannot.** Two repair cycles is normal. Three is a signal to stop and ask the user, not to keep guessing.
+3. **Iterate until green or until you can explain why you cannot.** Two repair cycles is normal. Three is a signal to stop and ask the user, not to keep guessing. When you do stop and ask, structure the ask: what you have tried, what failed, the strongest hypotheses, and what you need from the user.
 4. **Do not invent commands.** If the project has no typecheck, do not run `tsc` directly. If it has no linter, do not bolt on one. Use what is there.
 5. **Do not disable checks to make them pass.** Adding `// eslint-disable`, marking tests `skip`, weakening assertions, or commenting out failing lines is a regression, not a fix. Flag it and ask.
 6. **Report the result honestly.** Green output: say so with the command. Red output: paste the relevant error and explain whether your change caused it or it was pre-existing.
+
+### Extended checks (when applicable)
+
+- **Pre-commit hooks.** If the project has them (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`), run them and treat their failure as a verification failure. The hooks may wire a different gate than the linter script.
+- **Type-aware pre-flight.** Before the test loop, run `tsc --noEmit`, `mypy`, or the project's typecheck tool. Catches type errors faster than the full test run.
+- **Test the test (when adding new tests).** Run them against the unchanged code first; verify they fail or are trivially satisfied. Then run them against the change and verify they pass meaningfully. Catches tests that always pass.
+- **Dependency hygiene.** If the change added a new package, run `npm audit`, `cargo audit`, or `pip-audit` for that dep before declaring done.
+- **Diff self-review.** Before writing the report, run `git diff` and read it cold. The rendered diff is what the reviewer sees, not the patch you intended to write.
 
 ## Output format
 

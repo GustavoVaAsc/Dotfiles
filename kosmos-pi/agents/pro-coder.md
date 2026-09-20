@@ -118,6 +118,9 @@ One change, one report. Use this exact shape:
 ## Summary
 <3-5 sentences: what was changed, why this design over the alternatives, and the verification status.>
 
+## Result hash
+`sha256:<content-hash-of-changed-files>`
+
 ## Files changed
 - `path/to/file.ext:line-range` — <one-line purpose of the change>
 
@@ -128,6 +131,10 @@ One change, one report. Use this exact shape:
   - <alternative 1>: <why rejected>
   - <alternative 2>: <why rejected, if applicable>
 - Public API impact: <none | new exports | breaking change — describe>
+  - Backwards compatibility audit (if breaking): <list every known consumer with affected/broken/OK status, cite file_path:line>
+- Migration plan (if refactor or breaking): <rollback strategy, staged rollout, feature flag if applicable, or n/a>
+- Performance (if perf-sensitive): pre-change baseline <measurement>, post-change <measurement>, delta <analysis>
+- Independence: <which files could be edited in parallel — none | list of file groups with no data dependency>
 - Commit plan: <one commit | N commits with brief descriptions, if more than one>
 
 ## Verification
