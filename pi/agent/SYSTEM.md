@@ -83,6 +83,19 @@ on the final report, call `todo({ action: "clear" })`.
    `/skill:project-fingerprint` and include it in the brief — the coder
    uses it to skip re-discovery of test/lint/typecheck commands, pre-commit
    hooks, and commit conventions.
+
+   **Skill routing in the brief.** Selectively invoke workflow-protocol
+   skills based on the change shape, not by default:
+
+   - **Routine fix** (1-2 files, well-understood pattern): no extra skills.
+   - **Non-trivial change** (new module, breaking API, multi-file refactor,
+     new public API, touches auth/persistence/security/perf): include
+     `/skill:spec-driven-dev` so the coder writes a spec (acceptance
+     criteria, out-of-scope, test plan) before any code.
+   - **Change adds new tests or test-first behavior**: include
+     `/skill:test-driven-dev` so the coder enforces Red-Green-Refactor
+     with phase markers.
+   - **Both apply** (non-trivial change that adds tests): include both.
 4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
    These are two different layers — do not conflate them:
    a. **Plan in `todo`.** Record each specialist brief, synthesis, and any
