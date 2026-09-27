@@ -11,7 +11,7 @@
 #   2. Runs `npm install <pkg>` into ~/.pi/agent/npm/ (Pi's user package dir).
 #   3. Adds "file:$PKG_DIR" to ~/.pi/agent/settings.json packages if missing.
 #   4. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
-#      themes/, extensions/, mcp.json). Scoped per-file/per-subtree so Pi's other state
+#      themes/, extensions/, mcp-adapter.json). Scoped per-file/per-subtree so Pi's other state
 #      (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
 #   5. Syncs Pi extensions (.ts files under pi/agent/extensions/) into
 #      ~/.pi/agent/extensions/. Same per-subtree rsync as themes/.
@@ -110,7 +110,7 @@ fi
 mkdir -p "$PI_AGENT_DST/themes"
 mkdir -p "$PI_AGENT_DST/extensions"
 
-for entry in SYSTEM.md settings.json mcp.json; do
+for entry in SYSTEM.md settings.json mcp-adapter.json; do
 	if [ ! -e "$PI_AGENT_SRC/$entry" ]; then
 		echo "error: missing portable config file: $PI_AGENT_SRC/$entry" >&2
 		exit 1

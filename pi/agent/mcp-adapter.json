@@ -21,7 +21,7 @@
     },
     "sqlite": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/home/kosmos/.pi/agent/data/agent.sqlite"]
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/home/time_traveler/.pi/agent/data/agent.sqlite"]
     }
   }
 }

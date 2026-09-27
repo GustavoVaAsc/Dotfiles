@@ -38,7 +38,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
 2. Adds `"file:/home/kosmos/Dotfiles/kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
-3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
+3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp-adapter.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
 4. Syncs `~/Dotfiles/mcp/` → `~/.config/mcp/` (`mcp.json` only).
 5. Reports what changed. Safe to re-run.
 
@@ -80,7 +80,7 @@ Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
   - `SYSTEM.md` — parent system prompt injected into all Pi sessions
   - `settings.json` — user preferences, theme, default model, packages list
   - `themes/kosmos.json` — custom theme
-  - `mcp.json` — per-agent MCP server definitions
+  - `mcp-adapter.json` — per-agent MCP server definitions
   - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it alongside the active model in the TUI footer and terminal title
 - `mcp/` — global MCP config:
   - `mcp.json` — globally available MCP servers
@@ -142,7 +142,7 @@ Dotfiles/
 │   └── agent/
 │       ├── SYSTEM.md          # Parent system prompt
 │       ├── settings.json       # User preferences, theme, packages
-│       ├── mcp.json           # Per-agent MCP servers
+│       ├── mcp-adapter.json   # Per-agent MCP servers
 │       └── themes/
 │           └── kosmos.json    # Custom theme
 └── kosmos-pi/                 # The Pi package
