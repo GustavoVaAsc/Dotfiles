@@ -2,7 +2,7 @@
 name: security-auditor
 package: kosmos
 description: Audits code and configuration for security vulnerabilities — injection, authn/authz flaws, secrets, crypto, supply chain, and OWASP Top 10
-model: minimax/MiniMax-M3
+model: xiaomi-token-plan-sgp/mimo-v2.6-pro
 thinking: medium
 systemPromptMode: replace
 inheritProjectContext: true

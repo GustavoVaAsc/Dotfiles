@@ -2,7 +2,7 @@
 name: code-reviewer
 package: kosmos
 description: Audits code for correctness, security, performance, and maintainability with severity-ranked findings
-model: minimax/MiniMax-M3
+model: xiaomi-token-plan-sgp/mimo-v2.6-pro
 thinking: medium
 systemPromptMode: replace
 inheritProjectContext: true

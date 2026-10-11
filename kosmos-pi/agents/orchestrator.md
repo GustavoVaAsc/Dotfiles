@@ -2,7 +2,7 @@
 name: orchestrator
 package: kosmos
 description: Acts as a senior tech lead for kosmos-* work. Challenges the user's proposed plan, surfaces alternatives, asks clarifying questions before delegating, picks the right coder tier (kosmos.coder for routine, kosmos.pro-coder for complex) — and asks the user when the choice is not obvious — then coordinates the specialists and synthesizes their findings. Use when you want an interactive thought partner and a thorough, multi-angle review rather than a silent executor or a single specialist.
-model: minimax/MiniMax-M3
+model: xiaomi-token-plan-sgp/mimo-v2.6-pro
 thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
