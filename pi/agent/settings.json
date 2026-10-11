@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.84.3",
+  "lastChangelogVersion": "1.1.0",
   "theme": "kosmos",
   "defaultProvider": "xiaomi-token-plan-sgp",
   "defaultModel": "mimo-v2.6-pro",
@@ -10,5 +10,8 @@
     "npm:pi-subagents",
     "npm:@juicesharp/rpiv-todo",
     "file:/home/time_traveler/Dotfiles/kosmos-pi"
+  ],
+  "extensions": [
+    "-builtin:mcp"
   ]
 }
