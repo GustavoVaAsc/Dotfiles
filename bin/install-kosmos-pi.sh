@@ -2,28 +2,38 @@
 # install-kosmos-pi.sh
 # Idempotent installer for the kosmos-pi Pi package + portable config tree
 # from this Dotfiles repo. Run once on a new machine (or whenever the package
-# version bumps, or after editing the portable config tree):
+# version bumps, or after editing the portable config tree, or after a pinned
+# dependency version bumps):
 #
 #   ~/Dotfiles/bin/install-kosmos-pi.sh
 #
-# What it does:
+# What it does, in order:
 #   1. Locates the kosmos-pi package relative to this script.
 #   2. Runs `npm install <pkg>` into ~/.pi/agent/npm/ (Pi's user package dir).
-#   3. Adds "file:$PKG_DIR" to ~/.pi/agent/settings.json packages if missing.
-#   4. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
-#      themes/, extensions/, mcp-adapter.json). Scoped per-file/per-subtree so Pi's other state
-#      (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
-#   5. Syncs Pi extensions (.ts files under pi/agent/extensions/) into
-#      ~/.pi/agent/extensions/. Same per-subtree rsync as themes/.
+#   3. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
+#      themes/, extensions/, mcp-adapter.json). Scoped per-file/per-subtree so
+#      Pi's other state (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
+#   4. Normalises ~/.pi/agent/settings.json: removes every stale `file:<path>`
+#      entry that points at the kosmos-pi package (path ends with `kosmos-pi`,
+#      with or without a trailing slash) and appends exactly one `file:$PKG_DIR`
+#      entry. Other package entries are left untouched and in their original order.
+#   5. Reads the (now current) `packages` array and, for entries of the form
+#      `npm:<spec>` that carry an explicit version (e.g. `npm:pi-subagents@0.79.1`,
+#      `npm:@scope/pkg@1.2.3`), runs `npm install --save-exact <spec>` inside
+#      ~/.pi/agent/npm/. Unpinned `npm:` entries (e.g. `npm:pi-mcp-adapter`,
+#      `npm:@juicesharp/rpiv-todo`) are deliberately skipped — those are left
+#      to Pi's own package reconciliation, so this script never silently
+#      upgrades an unpinned package.
 #   6. Reports what changed. Exits non-zero on real failures.
 #
-# Safe to re-run: npm install is a no-op when already installed; settings.json
-# is patched via Python (json.load/dump) so formatting is preserved; the rsyncs
-# only touch their destination files and the themes/ subdirectory.
+# Safe to re-run: `npm install` is a no-op when the package is already at the
+# same version; the settings normalisation leaves a single canonical `file:`
+# entry alone and removes only stale ones, so re-running never duplicates the
+# entry; `npm install --save-exact` on an already-satisfied pin is a no-op.
 #
-# Note: settings.json is deployed verbatim from Dotfiles, which means Pi-managed
-# fields like `lastChangelogVersion` get overwritten on each install. This is
-# acceptable — Pi refreshes them on first run.
+# Note: settings.json is deployed verbatim from Dotfiles and then normalised
+# in step 4, which means Pi-managed fields like `lastChangelogVersion` get
+# overwritten on each install. This is acceptable — Pi refreshes them on first run.
 #
 # Note: the per-file/per-subtree rsync scoping (rather than a whole-directory
 # rsync) is intentional. A naive `rsync -a --delete pi/agent/ ~/.pi/agent/`
@@ -31,6 +41,8 @@
 # and other Pi state that lives alongside the files we sync. Scoping each rsync
 # to the specific file or subtree preserves that state while still allowing
 # stale-file cleanup within each synced subtree (e.g., removing an old theme).
+#
+# Reminder: restart Pi after running this so the new package version is loaded.
 
 set -euo pipefail
 
@@ -62,36 +74,6 @@ else
 	echo "error: npm install failed" >&2
 	exit 1
 fi
-
-# --- patch settings.json -------------------------------------------------------
-
-SETTINGS="${HOME}/.pi/agent/settings.json"
-if [ ! -f "$SETTINGS" ]; then
-	echo "error: $SETTINGS not found — is Pi installed?" >&2
-	exit 1
-fi
-
-ENTRY="file:$PKG_DIR"
-python3 - "$SETTINGS" "$ENTRY" <<'PY'
-import json, sys, pathlib
-
-settings_path = pathlib.Path(sys.argv[1])
-entry = sys.argv[2]
-
-with settings_path.open() as f:
-    settings = json.load(f)
-
-packages = settings.setdefault("packages", [])
-if entry in packages:
-    print(f"  ✓ {entry} already in settings.json (no change)")
-    sys.exit(0)
-
-packages.append(entry)
-with settings_path.open("w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
-print(f"  ✓ added {entry} to settings.json (now {len(packages)} packages)")
-PY
 
 # --- sync portable config tree into ~/.pi/agent/ ------------------------------
 # Scoped per-file/per-subtree to preserve Pi state outside the synced set
@@ -137,9 +119,105 @@ else
 	exit 1
 fi
 
+# --- patch settings.json -------------------------------------------------------
+# Run AFTER the rsync so this sees the canonical settings.json from the repo.
+# Any existing entry in `packages` that is a `file:` URL whose path's final
+# segment is `kosmos-pi` (with or without trailing slash) is removed; exactly
+# one `file:$PKG_DIR` entry is appended; everything else is left in place and
+# in its original order.
+
+SETTINGS="${HOME}/.pi/agent/settings.json"
+if [ ! -f "$SETTINGS" ]; then
+	echo "error: $SETTINGS not found — is Pi installed?" >&2
+	exit 1
+fi
+
+python3 - "$SETTINGS" "$PKG_DIR" <<'PY'
+import json, sys, pathlib
+
+settings_path = pathlib.Path(sys.argv[1])
+pkg_dir = sys.argv[2]
+entry = f"file:{pkg_dir}"
+
+with settings_path.open() as f:
+    settings = json.load(f)
+
+packages = settings.setdefault("packages", [])
+
+removed = []
+for p in [p for p in packages if isinstance(p, str) and p.startswith("file:")]:
+    name = pathlib.PurePath(p[len("file:"):].rstrip("/")).name
+    if name != "kosmos-pi":
+        continue
+    if p == entry:
+        # canonical entry already present in its current position; leave it
+        continue
+    packages.remove(p)
+    removed.append(p)
+
+for p in removed:
+    print(f"  ✓ removed stale {p}")
+
+if entry in packages:
+    print(f"  ✓ {entry} already in settings.json (no change)")
+else:
+    packages.append(entry)
+    print(f"  ✓ added {entry} to settings.json")
+
+with settings_path.open("w") as f:
+    json.dump(settings, f, indent=2)
+    f.write("\n")
+PY
+
+# --- install pinned npm packages ----------------------------------------------
+# Run AFTER the settings normalisation so we read the canonical packages array.
+# For each `npm:<spec>` entry that carries an explicit version (the part after
+# the last `/` contains `@`), run `npm install --save-exact <spec>` inside Pi's
+# npm dir with the `npm:` prefix stripped. Unpinned `npm:` entries are skipped
+# — those are left to Pi's own package reconciliation.
+
+python3 - "$SETTINGS" "$PI_NPM_DIR" <<'PY'
+import json, sys, pathlib, subprocess
+
+settings_path = pathlib.Path(sys.argv[1])
+npm_dir = sys.argv[2]
+
+with settings_path.open() as f:
+    settings = json.load(f)
+
+packages = settings.get("packages", [])
+
+pinned = []
+for entry in packages:
+    if not isinstance(entry, str) or not entry.startswith("npm:"):
+        continue
+    spec = entry[len("npm:"):]
+    # Look only at the part after the last `/` so scoped packages like
+    # `@juicesharp/rpiv-todo` (unpinned) are correctly distinguished from
+    # `@scope/pkg@1.2.3` (pinned).
+    last_segment = spec.rsplit("/", 1)[-1]
+    if "@" in last_segment:
+        pinned.append(spec)
+
+if not pinned:
+    print("  ✓ no pinned npm packages to install (unpinned npm: entries skipped — left to Pi's own reconciliation)")
+else:
+    for spec in pinned:
+        print(f"→ installing pinned npm package {spec}")
+        result = subprocess.run(
+            ["npm", "install", "--save-exact", spec],
+            cwd=npm_dir,
+        )
+        if result.returncode != 0:
+            print(f"error: npm install --save-exact {spec} failed", file=sys.stderr)
+            sys.exit(1)
+        print(f"  ✓ installed {spec}")
+PY
+
 # --- summary -------------------------------------------------------------------
 
 echo
-echo "Done. Restart Pi to load the package."
+echo "Done. Pinned npm packages installed and local kosmos-pi package linked."
+echo "Restart Pi to load the new package and extension versions."
 echo "After restart, /agents should list kosmos-* agents and"
 echo "/skill:pr-workflow, /skill:the-cock-of-justice should resolve."

@@ -9,7 +9,7 @@
     "npm:pi-web-access",
     "npm:pi-subagents@0.79.1",
     "npm:@juicesharp/rpiv-todo",
-    "file:/home/time_traveler/Dotfiles/kosmos-pi"
+    "file:/home/kosmos/Dotfiles/kosmos-pi"
   ],
   "extensions": [
     "-builtin:mcp"
