@@ -204,7 +204,7 @@ These agents were ported from OpenCode (`.config/opencode/agents/*.md`) to Pi's 
 | `temperature: 0.1` | `thinking: high` |
 | `temperature: 0.2-0.3` | `thinking: medium` |
 | `steps: N` | `turnBudget: { maxTurns: N, graceTurns: N/4 }` |
-| `permission.task: "agent": allow` | Removed — children don't spawn in Pi; orchestrator doc explains parent uses `subagent(...)` |
+| `permission.task: "agent": allow` | Removed for the coder tiers — they have no `subagent` tool. `kosmos.orchestrator` keeps it and dispatches the specialists itself. |
 | `permission.question: allow` | Removed — no Pi equivalent for subagents |
 | `model: provider/X` | `model: X` (Pi uses `defaultProvider` from settings) |
 | `color`, `webfetch` | Removed (cosmetic / non-equivalent) |

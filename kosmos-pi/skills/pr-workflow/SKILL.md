@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: Guides the user through preparing, committing, describing, and self-reviewing a pull request following widely-used open source conventions — Conventional Commits, focused PRs, structured PR descriptions, self-review checklists, and review etiquette for both authors and reviewers. Use when the user says "open a PR", "submit a PR", "create a PR", "commit this for review", "stage this", "prepare a PR", "review my PR before I open it", "what should my PR description say", or any request to package local changes for review. Use ONLY for PR-level workflow (commits, descriptions, self-review, review etiquette); do NOT use for implementation work (route to kosmos.coder or kosmos.pro-coder), code review of a finished PR by a reviewer (route to kosmos.code-reviewer), or general git operations unrelated to PR preparation.
+description: Prepares and self-reviews a pull request — Conventional Commits, focused diffs, a PR description, review etiquette. Use when the user says "open a PR", "prepare a PR", "commit this", or asks to package local changes for review.
 ---
 
 # PR Workflow

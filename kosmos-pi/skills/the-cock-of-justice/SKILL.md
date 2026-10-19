@@ -1,6 +1,6 @@
 ---
 name: the-cock-of-justice
-description: Runs a dual-lens revision on a plan or code change — one subagent audits the spec (does it solve the right problem, are requirements complete and testable, are alternatives weighed) and a second subagent audits quality (scalability, bugs, error handling, reliability, maintainability, performance, test gaps) — then returns a single ACCEPTED, WARNING, or FAIL verdict with a summary and concern bullets. Use ONLY when the user asks for it by name: "the cock of justice", "a verdict", a dual spec-and-quality review, or a blocker / scalability / bug audit on a plan or implementation. Do NOT fire it as part of a default review gate — that gate is kosmos.code-reviewer, with kosmos.security-auditor on security triggers. Do NOT use for routine single-lens code review — use kosmos.code-reviewer for that.
+description: Dual-lens verdict on a plan or change — one reviewer on the spec (right problem, testable requirements), one on quality (bugs, scaling, reliability, performance, test gaps). Returns ACCEPTED, WARNING or FAIL. Use only when asked by name.
 ---
 
 # The Cock of Justice
