@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: Guides the user through preparing, committing, describing, and self-reviewing a pull request following widely-used open source conventions — Conventional Commits, focused PRs, structured PR descriptions, self-review checklists, and review etiquette for both authors and reviewers. Use when the user says "open a PR", "submit a PR", "create a PR", "commit this for review", "stage this", "prepare a PR", "review my PR before I open it", "what should my PR description say", or any request to package local changes for review. Use ONLY for PR-level workflow (commits, descriptions, self-review, review etiquette); do NOT use for implementation work (route to kosmos-coder or kosmos-pro-coder), code review of a finished PR by a reviewer (route to kosmos-code-reviewer), or general git operations unrelated to PR preparation.
+description: Guides the user through preparing, committing, describing, and self-reviewing a pull request following widely-used open source conventions — Conventional Commits, focused PRs, structured PR descriptions, self-review checklists, and review etiquette for both authors and reviewers. Use when the user says "open a PR", "submit a PR", "create a PR", "commit this for review", "stage this", "prepare a PR", "review my PR before I open it", "what should my PR description say", or any request to package local changes for review. Use ONLY for PR-level workflow (commits, descriptions, self-review, review etiquette); do NOT use for implementation work (route to kosmos.coder or kosmos.pro-coder), code review of a finished PR by a reviewer (route to kosmos.code-reviewer), or general git operations unrelated to PR preparation.
 ---
 
 # PR Workflow
@@ -21,10 +21,10 @@ Trigger on any of:
 
 Do NOT fire when:
 
-- The user wants implementation work — route to kosmos-coder or kosmos-pro-coder.
-- The user wants a code review of an already-submitted PR — route to kosmos-code-reviewer.
-- The user wants a security audit — route to kosmos-security-auditor.
-- The user wants documentation generated — route to kosmos-docs-writer.
+- The user wants implementation work — route to kosmos.coder or kosmos.pro-coder.
+- The user wants a code review of an already-submitted PR — route to kosmos.code-reviewer.
+- The user wants a security audit — route to kosmos.security-auditor.
+- The user wants documentation generated — route to kosmos.docs-writer.
 - The request is general git usage unrelated to PR preparation (branching, stashing, rebasing without a PR destination).
 
 ## Workflow
@@ -96,8 +96,8 @@ Output the description as a fenced block the user can paste directly.
 
 Before declaring the PR ready, run a self-review pass. Delegate to specialists using the `subagent(...)` tool (the `pi-subagents` package) — spawn reviewers in parallel:
 
-- Always: invoke `kosmos-code-reviewer` on `git diff <base>...HEAD`. Treat any blocker or critical as a fix-first.
-- If the diff touches auth, input handling, secrets, crypto, network, or eval: also invoke `kosmos-security-auditor`.
+- Always: invoke `kosmos.code-reviewer` on `git diff <base>...HEAD`. Treat any blocker or critical as a fix-first.
+- If the diff touches auth, input handling, secrets, crypto, network, or eval: also invoke `kosmos.security-auditor`.
 - If the diff adds a public API, CLI flag, or new export: also flag API design concerns (naming, error shape, backward compat) for the user to consider — there is no dedicated agent for this.
 
 Then run this checklist. Any unchecked item is a finding to surface:
@@ -124,7 +124,7 @@ Surface the self-review report in this format:
 ready | needs-fix-first | needs-split
 
 ### Reviewer findings
-<aggregated kosmos-code-reviewer + kosmos-security-auditor output, severity-ordered>
+<aggregated kosmos.code-reviewer + kosmos.security-auditor output, severity-ordered>
 
 ### Checklist
 <completed items as checked; remaining items as unchecked with one-line note>

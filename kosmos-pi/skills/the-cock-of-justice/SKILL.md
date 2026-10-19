@@ -1,6 +1,6 @@
 ---
 name: the-cock-of-justice
-description: Runs a dual-lens revision on a plan or code change — one subagent audits the spec (does it solve the right problem, are requirements complete and testable, are alternatives weighed) and a second subagent audits quality (scalability, bugs, error handling, reliability, maintainability, performance, test gaps) — then returns a single ACCEPTED, WARNING, or FAIL verdict with a summary and concern bullets. Use when the user asks for "the cock of justice", a "verdict", a dual spec-and-quality review, or a blocker / scalability / bug audit on a plan or implementation. Also use when a plan or diff needs a hard go / no-go before further work. Do NOT use for routine single-lens code review — use kosmos-code-reviewer for that.
+description: Runs a dual-lens revision on a plan or code change — one subagent audits the spec (does it solve the right problem, are requirements complete and testable, are alternatives weighed) and a second subagent audits quality (scalability, bugs, error handling, reliability, maintainability, performance, test gaps) — then returns a single ACCEPTED, WARNING, or FAIL verdict with a summary and concern bullets. Use when the user asks for "the cock of justice", a "verdict", a dual spec-and-quality review, or a blocker / scalability / bug audit on a plan or implementation. Also use when a plan or diff needs a hard go / no-go before further work. Do NOT use for routine single-lens code review — use kosmos.code-reviewer for that.
 ---
 
 # The Cock of Justice
@@ -20,10 +20,10 @@ Trigger on any of:
 
 Do not fire when:
 
-- A routine single-lens code review is enough — use kosmos-code-reviewer.
-- The user only wants security review — use kosmos-security-auditor.
-- The user only wants documentation — use kosmos-docs-writer.
-- The work is to write code, not to judge it — use kosmos-coder or kosmos-pro-coder.
+- A routine single-lens code review is enough — use kosmos.code-reviewer.
+- The user only wants security review — use kosmos.security-auditor.
+- The user only wants documentation — use kosmos.docs-writer.
+- The work is to write code, not to judge it — use kosmos.coder or kosmos.pro-coder.
 
 ## Subagents
 
@@ -34,21 +34,21 @@ subagent({
   async: true,
   workflowScript: `
     const results = await runs.all([
-      { key: "spec", agent: "kosmos-security-auditor", task: "<spec reviewer brief>" },
-      { key: "quality", agent: "kosmos-security-auditor", task: "<quality reviewer brief>" }
+      { key: "spec", agent: "kosmos.security-auditor", task: "<spec reviewer brief>" },
+      { key: "quality", agent: "kosmos.security-auditor", task: "<quality reviewer brief>" }
     ]);
     return results.map(result => result.output);
   `
 });
 ```
 
-### Preferred: kosmos-security-auditor (×2)
+### Preferred: kosmos.security-auditor (×2)
 
 This is the user's stated preference. The security-auditor agent has the strictest read-only posture and the most disciplined report format; reuse it as the chassis even when the review is not security-focused. Override its prompt in each `subagent(...)` call so it knows which lens it is wearing.
 
 ### Fallback: scout or worker (×2)
 
-If `kosmos-security-auditor` is not registered in the current environment, fall back to two `scout` or `worker` subagents and apply the same role override.
+If `kosmos.security-auditor` is not registered in the current environment, fall back to two `scout` or `worker` subagents and apply the same role override.
 
 ### Roles
 
@@ -76,7 +76,7 @@ If `kosmos-security-auditor` is not registered in the current environment, fall 
 - Maintainability: dead code, duplicated logic, magic numbers, complexity hotspots, comment accuracy.
 - Security where it intersects quality: input validation, secret handling, dependency hygiene — but only at the level that affects shipping, not a full security audit.
 
-The quality reviewer is NOT doing a full security audit. If the user wants that, run kosmos-security-auditor separately after this skill returns.
+The quality reviewer is NOT doing a full security audit. If the user wants that, run kosmos.security-auditor separately after this skill returns.
 
 ## Spawning the subagents
 
@@ -176,7 +176,7 @@ Do not include a "ship verdict" or "fix-first / block" line — the verdict alre
 - **Self-contained briefs.** Each subagent gets the full picture. Do not forward-reference "see the spec review" or "see the other report".
 - **Strict verdict rubric.** Do not soften a FAIL to a WARNING because the change is small. Do not promote a WARNING to ACCEPTED because the user is in a hurry. The rubric is the rubric.
 - **Cite, do not paraphrase.** Every finding references `file_path:line`. Findings without a citation get sharpened or dropped during synthesis.
-- **Read-only.** This skill does not edit files, run tests, or commit. The verdict is the deliverable. If the user asks for revision, route to kosmos-coder or kosmos-pro-coder after the verdict is delivered.
+- **Read-only.** This skill does not edit files, run tests, or commit. The verdict is the deliverable. If the user asks for revision, route to kosmos.coder or kosmos.pro-coder after the verdict is delivered.
 - **No emojis, no fluff.** The output is read by an engineer under time pressure. Plain prose.
 - **Surface disagreement.** If the two reviewers disagree on severity or shippability, surface that explicitly in the summary. Do not pick a number silently.
 - **Stay quiet on adjacent topics.** This skill does not write docs, run security audits, or implement code. If a reviewer drifts into another role's territory, keep the relevant findings and discard the rest.
