@@ -7,7 +7,7 @@
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
-    "npm:pi-subagents",
+    "npm:pi-subagents@0.79.1",
     "npm:@juicesharp/rpiv-todo",
     "file:/home/time_traveler/Dotfiles/kosmos-pi"
   ],

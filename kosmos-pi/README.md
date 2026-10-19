@@ -109,7 +109,7 @@ The `kosmos.orchestrator` agent is meant to be invoked by the parent session. It
 1. Challenge your proposed plan and surface alternatives.
 2. Ask clarifying questions if scope or approach is ambiguous.
 3. Pick the right coder tier (`kosmos.coder` vs `kosmos.pro-coder`) based on signals, not safety.
-4. Fan out specialists in parallel via a single `subagent({ workflowScript: ..., async: true })` call whose script uses `runs.all`.
+4. Fan out independent specialists in parallel via `subagent({ workflow: "parallel", args: { tasks: [...] } })`.
 5. Synthesize their findings into one consolidated report with a ship verdict.
 
 A typical invocation:
@@ -125,14 +125,13 @@ Parallel fan-out:
 
 ```typescript
 subagent({
-  async: true,
-  workflowScript: `
-    const results = await runs.all([
-      { key: "review", agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." },
-      { key: "audit", agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
-    ]);
-    return results.map(result => result.output);
-  `
+  workflow: "parallel",
+  args: {
+    tasks: [
+      { agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." },
+      { agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
+    ]
+  }
 })
 ```
 

@@ -98,14 +98,13 @@ Before declaring the PR ready, run a self-review pass. Delegate to specialists u
 
 ```js
 subagent({
-  async: true,
-  workflowScript: `
-    const results = await runs.all([
-      { key: "review", agent: "kosmos.code-reviewer", task: "<code review brief>" },
-      { key: "audit", agent: "kosmos.security-auditor", task: "<security audit brief>" }
-    ]);
-    return results.map(result => result.output);
-  `
+  workflow: "parallel",
+  args: {
+    tasks: [
+      { agent: "kosmos.code-reviewer", task: "<code review brief>" },
+      { agent: "kosmos.security-auditor", task: "<security audit brief>" }
+    ]
+  }
 });
 ```
 

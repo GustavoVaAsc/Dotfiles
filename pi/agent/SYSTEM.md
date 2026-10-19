@@ -8,20 +8,17 @@ before assuming when an answer would change the outcome.
 
 ## Specialists (via the `subagent` tool)
 
-Three legal dispatch forms:
-- One child: `subagent({ agent: <name>, task: <brief>, async: true })`
-- Parallel fan-out: ONE `subagent({ workflowScript: <js string>, async: true })`
-  whose script calls `await runs.all([{ key, agent, task }, ...])`; `runs.all`
-  returns an **ordered array**, not a key map
-- Packaged resource: `subagent({ workflow: "review" | "run-ci", args: {...} })`
-  where `workflow` is a string name, not a boolean
+Four legal dispatch forms:
+- One child: `subagent({ agent: <name>, task: <brief> })`
+- Independent parallel children: `subagent({ workflow: "parallel", args: { tasks: [{ agent, task }, ...] } })` — one batch, outputs in order, no script to write
+- Dependent multi-step work: write one `` ```js workflow `` block in the same reply, then `subagent({ workflow: true, async: true })`; the script is a JavaScript statement body using `await runs.run("key", { agent, task })` and `await runs.all([{ key, agent, task }, ...])`
+- A script file or a packaged resource: `subagent({ workflow: "./scripts/review.js" })` (a value containing "/" is a path) or `subagent({ workflow: "review" | "run-ci", args: {...} })`
 
-The top-level `tasks`, `chain`, `parallel`, `concurrency`, `chainDir` inputs were
-**removed** and now hard-fail at launch. Do not use them.
+The `workflowScript` and `workflowScriptPath` parameters, and the top-level `tasks`, `chain`, `parallel` inputs, were **removed** and now hard-fail at launch. Do not use them. Workflows run in the background by default and their completion wakes the session; `async: false` blocks until the results are in.
 
 Pass each child a self-contained brief: changed files, scope, the question, prior clarifications.
 
-*Dispatch syntax verified against pi-subagents 0.70.1.*
+*Dispatch syntax verified against pi-subagents 0.79.1.*
 
 - `kosmos.coder` (`MiniMax-M3`, aliases `dev`, `implementer`) — routine
   implementation: well-scoped, small diff, clear existing pattern, no new public
@@ -118,16 +115,15 @@ on the final report, call `todo({ action: "clear" })`.
       post-impl gate as a todo task. Set `blockedBy` only for real data
       dependencies or same-file edits; absence of `blockedBy` means
       parallel-eligible.
-   b. **Dispatch via the subagent extension.** Independent children are
-      launched together in a single `workflowScript` whose script calls `await
-      runs.all([...])` with stable keys, then collected. `runs.run` is the
-      sequential primitive: it awaits one child and passes its output to the next
-      step. Default to parallel;
-      serial only when one child's output is another's input or two children
-      write the same file. If one child in a `runs.all` fails, the others
-      still complete — collect what you have, surface the failure, and decide
-      whether to retry or escalate. Do not silently drop a failed child's
-      contribution.
+   b. **Dispatch via the subagent extension.** Independent children go out in
+      one call — `subagent({ workflow: "parallel", args: { tasks: [{ agent,
+      task }, ...] } })` — and come back in the same order. Use a workflow
+      script (a `` ```js workflow `` block in the same reply, then
+      `subagent({ workflow: true })`) only when one child's output is another's
+      input. Default to parallel; serial only when two children write the same
+      file. If a child in a parallel batch fails, the batch fails — surface the
+      failure, decide whether to retry or escalate, and do not silently drop the
+      failed child's contribution.
 5. **Delegate** with a self-contained brief per child. Do not assume the
    specialist knows context you have not given them.
 6. **Synthesize.** Dedupe findings raised by more than one specialist; resolve

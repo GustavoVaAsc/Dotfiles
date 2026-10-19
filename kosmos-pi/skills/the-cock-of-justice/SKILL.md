@@ -27,19 +27,18 @@ Do not fire when:
 
 ## Subagents
 
-Spawn exactly two subagents in parallel via a SINGLE `subagent(...)` call carrying a `workflowScript` that uses `runs.all`. The legacy top-level `tasks: [...]` form was removed and now fails at launch — do not use it. Do not serialize the two reviewers; do not issue two separate top-level `subagent(...)` calls. Both reviewer briefs are launched together inside `runs.all`.
+Spawn exactly two subagents in parallel with a single `subagent(...)` call (from the `pi-subagents` package) using the `parallel` workflow. The two reviewers are independent, so no workflow script is needed. The legacy top-level `tasks: [...]` form was removed and now fails at launch — do not use it. Do not serialize the two reviewers, and do not issue two separate top-level `subagent(...)` calls.
 
 ```js
 // both reviewers are kosmos.security-auditor; the brief tells each which lens to wear
 subagent({
-  async: true,
-  workflowScript: `
-    const results = await runs.all([
-      { key: "spec", agent: "kosmos.security-auditor", task: "<spec reviewer brief>" },
-      { key: "quality", agent: "kosmos.security-auditor", task: "<quality reviewer brief>" }
-    ]);
-    return results.map(result => result.output);
-  `
+  workflow: "parallel",
+  args: {
+    tasks: [
+      { agent: "kosmos.security-auditor", task: "<spec reviewer brief>" },
+      { agent: "kosmos.security-auditor", task: "<quality reviewer brief>" }
+    ]
+  }
 });
 ```
 
@@ -81,7 +80,7 @@ The quality reviewer is NOT doing a full security audit. If the user wants that,
 
 ## Spawning the subagents
 
-Both reviewer briefs are launched together by the one `workflowScript` call. Each brief must be self-contained:
+Both reviewer briefs are launched together by the one `parallel` call, and each brief must be self-contained:
 
 - The change or plan being reviewed.
 - The files in scope (paths).
@@ -91,7 +90,7 @@ Both reviewer briefs are launched together by the one `workflowScript` call. Eac
 
 Do not give either subagent context that depends on the other — they cannot share state.
 
-`runs.all` returns an **ordered array** (index 0 = spec reviewer, index 1 = quality reviewer), not a key map.
+The `parallel` resource runs the two reviewers in one batch and returns their outputs in order — index 0 is the spec reviewer, index 1 is the quality reviewer.
 
 ### Subagent output format
 
