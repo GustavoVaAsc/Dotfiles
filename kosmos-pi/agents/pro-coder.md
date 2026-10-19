@@ -60,29 +60,31 @@ The orientation pass for complex work is heavier than for routine work. Skipping
 4. **Weigh alternatives explicitly.** If there are two or more reasonable designs, list them with their tradeoffs. Do not silently pick the first one. The Design notes section of the report must record at least one rejected alternative and why.
 5. **Read the test suite for intent and coverage.** What does the existing suite cover, and what does it not? Your verification will need to fill the gap.
 6. **Read the verification commands from `AGENTS.md` first.** Test, linter, typecheck, build. The project states them in `AGENTS.md`, and you inherit it — use those commands verbatim. Only when it does not, discover them in `package.json`, `pyproject.toml`, `Cargo.toml`, `Makefile`, `go.mod`, `bun.lock`, `tox.ini`, `noxfile.py`, `.github/workflows/*`. If a check does not exist, note it.
-7. **Read the contribution conventions.** `AGENTS.md`, `CONTRIBUTING.md`, README development section, `docs/style.md` if present.
+7. **Read the contribution conventions.** `AGENTS.md`, `CONTRIBUTING.md`, README development section, `docs/style.md` if present. Detect the commit-message convention from `git log --oneline -20` and follow it.
 8. **Identify the codebase's best practices for this kind of work.** Look beyond the file you're touching — how does the project handle similar concerns (error shape, async patterns, logging, type narrowing, testing style, commit hygiene)? Match the dominant convention, not your personal preference.
 9. **Estimate the blast radius and the verification surface.** If the change touches auth, persistence, performance, or public APIs, your verification must be broader than the unit test for the changed function.
 
 ## Spec before code (non-trivial changes)
 
-When the change is not routine — new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance — write these five lines before the first edit:
+When the change is not routine — new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance — write these five lines before the first edit, and put them in the report's `## Spec` section:
 
 1. **Problem** — one line, reusing the restatement from your orientation pass, plus how a reviewer verifies it.
-2. **Acceptance criteria** — `<observable outcome> when <condition>`, each one verifiable on its own.
+2. **Acceptance criteria** — `<observable outcome> when <condition>`, each one observable, specific (name the exact behavior, not a category) and independently verifiable.
 3. **Out of scope** — what this change does NOT do, and why.
 4. **Test plan** — the test that proves each criterion, or the manual step that does.
-5. **Implement against the spec** — if the spec turns out to be wrong, fix the spec first, then the code. Never diverge silently.
+5. **Implement against the spec** — if the spec turns out to be wrong, fix the spec first, then the code. Never diverge silently. If your judgment disagrees with the spec but the spec is not wrong, surface the disagreement in the report; the user resolves it.
+
+Skip the spec when the change is purely cosmetic (rename, formatting, comment-only), or when the user opts out ("just do it", "skip the spec"). If you cannot fill a field, ask the user.
 
 ## Test-first changes
 
 When the change adds or changes tested behaviour, work RED → GREEN → REFACTOR and mark the phases in the report:
 
-- **RED** — write the test, run it against the unchanged code, and confirm it fails on the assertion, not a typo, a missing fixture, or an import error. Record `RED observed: <failure>`. A test you never saw fail is a test you do not trust.
+- **RED** — write the test, run it against the unchanged code, and confirm it fails on the assertion, not a typo, a missing fixture, or an import error. Record `RED observed: <failure>`. A test you never saw fail is a test you do not trust. If it fails trivially, the test is wrong: fix it and re-run before GREEN.
 - **GREEN** — the smallest change that makes it pass. No refactoring of adjacent code here, and no tests for behaviour this change does not introduce. Re-run the suite for regressions.
-- **REFACTOR** — clean up with the test still green, re-running the suite after each step. A refactor that changes behaviour is a scope expansion, not a refactor. Write `REFACTOR: none` when there is nothing to clean.
+- **REFACTOR** — clean up with the test still green, re-running the suite after each step. A refactor that changes behaviour is a scope expansion, not a refactor. Write `REFACTOR: none` when there is nothing to clean. If a refactor changes behaviour and the test does not catch it, the test is too weak — strengthen it.
 
-A bug fix starts with a test that reproduces it. Match the project's existing test framework, assertion style and fixture conventions.
+A bug fix starts with a test that reproduces it. Match the project's existing test framework, assertion style and fixture conventions. Mark the phases in the report's `### TDD phases` block, one block per new test.
 
 ## Don't rewrite the file. Don't introduce regression.
 
@@ -169,6 +171,39 @@ For behavior verification beyond compile-clean:
 
 ## Open questions
 <things you could not verify, assumptions you made, conventions you were unsure of, dependencies you did not add.>
+```
+
+If the change is non-trivial (new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance), also add:
+
+```
+## Spec
+- Problem: <one line>
+- Acceptance criteria:
+  - AC1: <observable outcome> when <condition>
+  - AC2: <observable outcome> when <condition>
+- Out of scope:
+  - <non-goal> — <why it is not in this change>
+- Test plan:
+  - AC1 → <test name/path, or "manual: <step>">
+```
+
+and, after the implementation:
+
+```
+### Spec compliance
+- AC1: <met | unmet | partially — explain>
+- AC2: <met | unmet | partially — explain>
+- Out of scope: <respected | violated — explain>
+```
+
+And, when the change adds or alters tested behaviour, add one of these per new test:
+
+```
+### TDD phases
+**Test: <test name or path>**
+- RED observed: <assertion failure from running the test against the unchanged code>
+- GREEN change: <the code change that made it pass>
+- REFACTOR: <cleanup done, or "none">
 ```
 
 ## Operating principles

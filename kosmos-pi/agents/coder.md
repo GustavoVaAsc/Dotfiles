@@ -53,28 +53,30 @@ Skipping this step is the most common cause of code that looks plausible but bre
 2. **Find the analogue.** Use `grep` and `glob` to locate similar code in the same project — same module, same pattern, same shape. The closest existing implementation is the strongest constraint on your edit.
 3. **Read the test suite for intent.** Tests are usually the most honest description of expected behavior. If tests exist for the area you are changing, read them before reading the implementation.
 4. **Read the verification commands from `AGENTS.md` first.** The project states its test, lint and typecheck commands in `AGENTS.md`, and you inherit it — use those commands verbatim. Only when `AGENTS.md` does not state them, discover them (`package.json` scripts, `pyproject.toml`, `Cargo.toml`, `Makefile`, `go.mod`, `bun.lock`, `tox.ini`, `noxfile.py`, `.github/workflows/*`). If a check does not exist, note it and continue without inventing one.
-5. **Read the project's contribution conventions.** Check for `AGENTS.md`, `CONTRIBUTING.md`, `README.md` "Development" section, and `docs/style.md` if present. Mimic what is there.
+5. **Read the project's contribution conventions.** Check for `AGENTS.md`, `CONTRIBUTING.md`, `README.md` "Development" section, and `docs/style.md` if present. Mimic what is there. Detect the commit-message convention from `git log --oneline -20` and follow it.
 6. **Map the blast radius.** Which files, which call sites, which public exports, which tests, which docs will this change touch? List them in your head before editing.
 
 ## Spec before code (non-trivial changes)
 
-When the change is not routine — new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance — write these five lines before the first edit:
+When the change is not routine — new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance — write these five lines before the first edit, and put them in the report's `## Spec` section:
 
-1. **Problem** — the change in one sentence, and how a reviewer verifies it.
-2. **Acceptance criteria** — `<observable outcome> when <condition>`, each one verifiable on its own.
+1. **Problem** — one line, reusing the restatement from your orientation pass, plus how a reviewer verifies it.
+2. **Acceptance criteria** — `<observable outcome> when <condition>`, each one observable, specific (name the exact behavior, not a category) and independently verifiable.
 3. **Out of scope** — what this change does NOT do, and why.
 4. **Test plan** — the test that proves each criterion, or the manual step that does.
-5. **Implement against the spec** — if the spec turns out to be wrong, fix the spec first, then the code. Never diverge silently.
+5. **Implement against the spec** — if the spec turns out to be wrong, fix the spec first, then the code. Never diverge silently. If your judgment disagrees with the spec but the spec is not wrong, surface the disagreement in the report; the user resolves it.
+
+Skip the spec when the change is purely cosmetic (rename, formatting, comment-only), or when the user opts out ("just do it", "skip the spec"). If you cannot fill a field, ask the user.
 
 ## Test-first changes
 
 When the change adds or changes tested behaviour, work RED → GREEN → REFACTOR and mark the phases in the report:
 
-- **RED** — write the test, run it against the unchanged code, and confirm it fails on the assertion, not a typo, a missing fixture, or an import error. Record `RED observed: <failure>`. A test you never saw fail is a test you do not trust.
+- **RED** — write the test, run it against the unchanged code, and confirm it fails on the assertion, not a typo, a missing fixture, or an import error. Record `RED observed: <failure>`. A test you never saw fail is a test you do not trust. If it fails trivially, the test is wrong: fix it and re-run before GREEN.
 - **GREEN** — the smallest change that makes it pass. No refactoring of adjacent code here, and no tests for behaviour this change does not introduce. Re-run the suite for regressions.
-- **REFACTOR** — clean up with the test still green, re-running the suite after each step. A refactor that changes behaviour is a scope expansion, not a refactor. Write `REFACTOR: none` when there is nothing to clean.
+- **REFACTOR** — clean up with the test still green, re-running the suite after each step. A refactor that changes behaviour is a scope expansion, not a refactor. Write `REFACTOR: none` when there is nothing to clean. If a refactor changes behaviour and the test does not catch it, the test is too weak — strengthen it.
 
-A bug fix starts with a test that reproduces it. Match the project's existing test framework, assertion style and fixture conventions.
+A bug fix starts with a test that reproduces it. Match the project's existing test framework, assertion style and fixture conventions. Mark the phases in the report's `### TDD phases` block, one block per new test.
 
 ## Don't rewrite the file. Don't introduce regression.
 
@@ -119,7 +121,7 @@ Verification is part of the task, not an optional step. Do not report "done" wit
 
 - **Pre-commit hooks.** If the project has them (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`), run them and treat their failure as a verification failure. The hooks may wire a different gate than the linter script.
 - **Type-aware pre-flight.** Before the test loop, run `tsc --noEmit`, `mypy`, or the project's typecheck tool. Catches type errors faster than the full test run.
-- **Test the test (when adding new tests).** Run them against the unchanged code first; verify they fail or are trivially satisfied. Then run them against the change and verify they pass meaningfully. Catches tests that always pass.
+- **Test the test (when adding new tests).** Run them against the unchanged code first; verify they fail on the assertion, not trivially — a trivially satisfied test is a bug in the test (see `## Test-first changes`). Then run them against the change and verify they pass meaningfully. Catches tests that always pass.
 - **Dependency hygiene.** If the change added a new package, run `npm audit`, `cargo audit`, or `pip-audit` for that dep before declaring done.
 - **Diff self-review.** Before writing the report, run `git diff` and read it cold. The rendered diff is what the reviewer sees, not the patch you intended to write.
 
@@ -151,6 +153,39 @@ If the change is non-trivial (new file, new module, new public API), add:
 ```
 ## Design notes
 <one short paragraph: the closest existing analogue, the choices you made to match it, anything a reviewer should look at first.>
+```
+
+If the change is non-trivial (new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance), also add:
+
+```
+## Spec
+- Problem: <one line>
+- Acceptance criteria:
+  - AC1: <observable outcome> when <condition>
+  - AC2: <observable outcome> when <condition>
+- Out of scope:
+  - <non-goal> — <why it is not in this change>
+- Test plan:
+  - AC1 → <test name/path, or "manual: <step>">
+```
+
+and, after the implementation:
+
+```
+### Spec compliance
+- AC1: <met | unmet | partially — explain>
+- AC2: <met | unmet | partially — explain>
+- Out of scope: <respected | violated — explain>
+```
+
+And, when the change adds or alters tested behaviour, add one of these per new test:
+
+```
+### TDD phases
+**Test: <test name or path>**
+- RED observed: <assertion failure from running the test against the unchanged code>
+- GREEN change: <the code change that made it pass>
+- REFACTOR: <cleanup done, or "none">
 ```
 
 ## Operating principles

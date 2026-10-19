@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: Prepares and self-reviews a pull request — Conventional Commits, focused diffs, a PR description, review etiquette. Use when the user says "open a PR", "prepare a PR", "commit this", or asks to package local changes for review.
+description: Prepares and self-reviews a PR — Conventional Commits, focused diffs, a PR description, review etiquette. Use on "open a PR", "prepare a PR", "commit this", or a request to package local changes for review. Not for implementation (kosmos.coder) or for reviewing an open PR (kosmos.code-reviewer).
 ---
 
 # PR Workflow

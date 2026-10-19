@@ -101,10 +101,12 @@ on the final report, call `todo({ action: "clear" })`.
    point at `AGENTS.md`. If `AGENTS.md` does not state them, let the coder
    discover them; do not pre-scan for them here.
 
-   **No skills in the brief.** The coder tiers carry their own protocols
-   inline — spec before code, test-first — so a brief states the change, not
-   a protocol. Never send a child a `/skill:` route: children cannot resolve
-   one, and the request fails.
+   **No skills in the brief (the parent may still fire its own).** The coder
+   tiers carry their own protocols inline — spec before code, test-first — so
+   a brief states the change, not a protocol. Never send a child a `/skill:`
+   route: a child cannot resolve one, and it proceeds without it. The parent
+   may still fire `/skill:pr-workflow` or `/skill:the-cock-of-justice`
+   itself; only briefs stay protocol-free.
 4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
    These are two different layers — do not conflate them:
    a. **Plan in `todo`.** Record each specialist brief, synthesis, and any

@@ -1,6 +1,6 @@
 ---
 name: the-cock-of-justice
-description: Dual-lens verdict on a plan or change — one reviewer on the spec (right problem, testable requirements), one on quality (bugs, scaling, reliability, performance, test gaps). Returns ACCEPTED, WARNING or FAIL. Use only when asked by name.
+description: Dual-lens verdict on a plan or change — one reviewer on the spec (right problem, testable requirements), one on quality (bugs, scaling, reliability, performance, test gaps). Returns ACCEPTED, WARNING or FAIL. Use only when the user asks for it by name or asks for a verdict.
 ---
 
 # The Cock of Justice
@@ -14,7 +14,7 @@ This skill is read-only. It does not edit files, run code, or commit. Its output
 Trigger on any of:
 
 - Explicit invocation: "use the cock of justice on this", "judge this plan", "verdict on this diff", "give me the cock of justice".
-- The user wants a spec review (are we solving the right problem?) AND a quality review (is what we built sound?) in a single pass.
+- The user asks for a spec review (are we solving the right problem?) AND a quality review (is what we built sound?) in a single pass.
 
 Do not fire when:
 
