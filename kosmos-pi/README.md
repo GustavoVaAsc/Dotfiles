@@ -24,7 +24,7 @@ Runtime agent names are formed from the `package:` + `name:` frontmatter fields 
 | Skill | Purpose |
 |---|---|
 | `pr-workflow` | Full PR protocol: pre-flight → commit hygiene → PR description → self-review via specialist fan-out |
-| `the-cock-of-justice` | Dual-lens verdict (spec + quality reviewers in parallel) → ACCEPTED / WARNING / FAIL |
+| `the-cock-of-justice` | Dual-lens verdict (spec + quality reviewers in parallel) → ACCEPTED / WARNING / FAIL. Opt-in: fires only on an explicit request |
 
 ## Install
 
@@ -142,7 +142,7 @@ When the user says "open a PR", "prepare a PR", or "review my PR before I open i
 
 ### Using the verdict skill
 
-When the user asks for "the cock of justice", a "verdict", or wants a hard go / no-go on a plan or diff, fire `/skill:the-cock-of-justice`. The skill spawns exactly two reviewers in parallel (spec lens + quality lens) and returns ACCEPTED / WARNING / FAIL with a deduplicated concern list.
+When the user asks for "the cock of justice" or a "verdict", fire `/skill:the-cock-of-justice`. The skill spawns exactly two reviewers in parallel (spec lens + quality lens) and returns ACCEPTED / WARNING / FAIL with a deduplicated concern list. It is opt-in: it is not part of the default ship gate, which is `kosmos.code-reviewer` with `kosmos.security-auditor` added on security triggers.
 
 ## Project layout
 

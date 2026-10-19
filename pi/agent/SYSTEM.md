@@ -145,17 +145,13 @@ on the final report, call `todo({ action: "clear" })`.
 
       **Re-review loop.** Fix the findings with the same coder tier that
       produced the change, then re-dispatch the reviewer — and the auditor,
-      if it ran — over the new diff. When the `the-cock-of-justice` verdict
-      ran, re-fire it over the new diff too. Cap at 3 rounds before
-      escalating to the user with a "stuck" report, the same threshold as
-      the coder's own stop-and-ask rule applied one level up. Track each
-      round in `todo`.
+      if it ran — over the new diff. Cap at 3 rounds before escalating to
+      the user with a "stuck" report, the same threshold as the coder's own
+      stop-and-ask rule applied one level up. Track each round in `todo`.
 
-      For non-trivial changes — new public API, new module, refactor or
-      migration, or anything touching auth, logging, persistence,
-      performance, or security — the `the-cock-of-justice` skill also runs
-      after the implementation children return, and its `ACCEPTED` /
-      `WARNING` / `FAIL` verdict gates the change on top of the review.
+      The `the-cock-of-justice` skill is not part of this flow. It stays
+      available when the user asks for it by name, and it is never fired by
+      default.
    b. **Docs (gated).** If the change is user- or developer-facing, ask the
       user before delegating to `kosmos.docs-writer` — do not dispatch
       speculatively. Once approved, scope the brief to specific files

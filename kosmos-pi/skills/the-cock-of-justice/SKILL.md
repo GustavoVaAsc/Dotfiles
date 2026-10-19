@@ -1,6 +1,6 @@
 ---
 name: the-cock-of-justice
-description: Runs a dual-lens revision on a plan or code change — one subagent audits the spec (does it solve the right problem, are requirements complete and testable, are alternatives weighed) and a second subagent audits quality (scalability, bugs, error handling, reliability, maintainability, performance, test gaps) — then returns a single ACCEPTED, WARNING, or FAIL verdict with a summary and concern bullets. Use when the user asks for "the cock of justice", a "verdict", a dual spec-and-quality review, or a blocker / scalability / bug audit on a plan or implementation. Also use when a plan or diff needs a hard go / no-go before further work. Do NOT use for routine single-lens code review — use kosmos.code-reviewer for that.
+description: Runs a dual-lens revision on a plan or code change — one subagent audits the spec (does it solve the right problem, are requirements complete and testable, are alternatives weighed) and a second subagent audits quality (scalability, bugs, error handling, reliability, maintainability, performance, test gaps) — then returns a single ACCEPTED, WARNING, or FAIL verdict with a summary and concern bullets. Use ONLY when the user asks for it by name: "the cock of justice", "a verdict", a dual spec-and-quality review, or a blocker / scalability / bug audit on a plan or implementation. Do NOT fire it as part of a default review gate — that gate is kosmos.code-reviewer, with kosmos.security-auditor on security triggers. Do NOT use for routine single-lens code review — use kosmos.code-reviewer for that.
 ---
 
 # The Cock of Justice
@@ -14,16 +14,17 @@ This skill is read-only. It does not edit files, run code, or commit. Its output
 Trigger on any of:
 
 - Explicit invocation: "use the cock of justice on this", "judge this plan", "verdict on this diff", "give me the cock of justice".
-- A plan or implementation needs a hard go / conditional-go / no-go before further work continues.
-- The user asks for blockers, scalability issues, bugs, or other errors to be surfaced in a plan or diff.
 - The user wants a spec review (are we solving the right problem?) AND a quality review (is what we built sound?) in a single pass.
 
 Do not fire when:
 
+- The user did not ask for it. A default review gate is not a reason to fire this skill; the default gate is kosmos.code-reviewer, with kosmos.security-auditor when the change touches auth, input handling, secrets, crypto, network, or eval.
 - A routine single-lens code review is enough — use kosmos.code-reviewer.
 - The user only wants security review — use kosmos.security-auditor.
 - The user only wants documentation — use kosmos.docs-writer.
 - The work is to write code, not to judge it — use kosmos.coder or kosmos.pro-coder.
+
+This skill is opt-in: it is never fired as part of a default ship gate.
 
 ## Subagents
 
