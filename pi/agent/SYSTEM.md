@@ -93,24 +93,18 @@ on the final report, call `todo({ action: "clear" })`.
    cases above). For a typical change, fan out the review and the docs work
    in parallel; implementation work adds one of the two coder tiers. The
    review gate is `kosmos.code-reviewer` by default, with
-   `kosmos.security-auditor` added only on the triggers in step 7a. Before
-   dispatching, capture the project's tooling fingerprint via
-   `/skill:project-fingerprint` and include it in the brief — the coder
-   uses it to skip re-discovery of test/lint/typecheck commands, pre-commit
-   hooks, and commit conventions.
+   `kosmos.security-auditor` added only on the triggers in step 7a.
 
-   **Skill routing in the brief.** Selectively invoke workflow-protocol
-   skills based on the change shape, not by default:
+   **Tooling context in the brief.** Do not fingerprint the project in the
+   parent. The project's `AGENTS.md` states its test, lint and typecheck
+   commands, and the child inherits it — name the commands in the brief, or
+   point at `AGENTS.md`. If `AGENTS.md` does not state them, let the coder
+   discover them; do not pre-scan for them here.
 
-   - **Routine fix** (1-2 files, well-understood pattern): no extra skills.
-   - **Non-trivial change** (new module, breaking API, multi-file refactor,
-     new public API, touches auth/persistence/security/perf): include
-     `/skill:spec-driven-dev` so the coder writes a spec (acceptance
-     criteria, out-of-scope, test plan) before any code.
-   - **Change adds new tests or test-first behavior**: include
-     `/skill:test-driven-dev` so the coder enforces Red-Green-Refactor
-     with phase markers.
-   - **Both apply** (non-trivial change that adds tests): include both.
+   **No skills in the brief.** The coder tiers carry their own protocols
+   inline — spec before code, test-first — so a brief states the change, not
+   a protocol. Never send a child a `/skill:` route: children cannot resolve
+   one, and the request fails.
 4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
    These are two different layers — do not conflate them:
    a. **Plan in `todo`.** Record each specialist brief, synthesis, and any
