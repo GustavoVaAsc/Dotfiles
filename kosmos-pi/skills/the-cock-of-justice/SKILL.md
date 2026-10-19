@@ -30,6 +30,7 @@ Do not fire when:
 Spawn exactly two subagents in parallel via a SINGLE `subagent(...)` call carrying a `workflowScript` that uses `runs.all`. The legacy top-level `tasks: [...]` form was removed and now fails at launch — do not use it. Do not serialize the two reviewers; do not issue two separate top-level `subagent(...)` calls. Both reviewer briefs are launched together inside `runs.all`.
 
 ```js
+// both reviewers are kosmos.security-auditor; the brief tells each which lens to wear
 subagent({
   async: true,
   workflowScript: `

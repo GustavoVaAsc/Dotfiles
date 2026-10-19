@@ -96,6 +96,19 @@ Output the description as a fenced block the user can paste directly.
 
 Before declaring the PR ready, run a self-review pass. Delegate to specialists using the `subagent(...)` tool (the `pi-subagents` package) — spawn reviewers in parallel:
 
+```js
+subagent({
+  async: true,
+  workflowScript: `
+    const results = await runs.all([
+      { key: "review", agent: "kosmos.code-reviewer", task: "<code review brief>" },
+      { key: "audit", agent: "kosmos.security-auditor", task: "<security audit brief>" }
+    ]);
+    return results.map(result => result.output);
+  `
+});
+```
+
 - Always: invoke `kosmos.code-reviewer` on `git diff <base>...HEAD`. Treat any blocker or critical as a fix-first.
 - If the diff touches auth, input handling, secrets, crypto, network, or eval: also invoke `kosmos.security-auditor`.
 - If the diff adds a public API, CLI flag, or new export: also flag API design concerns (naming, error shape, backward compat) for the user to consider — there is no dedicated agent for this.
