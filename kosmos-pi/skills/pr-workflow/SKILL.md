@@ -101,8 +101,9 @@ subagent({
   workflow: "parallel",
   args: {
     tasks: [
-      { agent: "kosmos.code-reviewer", task: "<code review brief>" },
-      { agent: "kosmos.security-auditor", task: "<security audit brief>" }
+      { agent: "kosmos.code-reviewer", task: "<code review brief>" }
+      // Add { agent: "kosmos.security-auditor", task: "<security audit brief>" }
+      // when the diff touches auth, input handling, secrets, crypto, network, or eval.
     ]
   }
 });

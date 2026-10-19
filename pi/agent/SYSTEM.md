@@ -90,8 +90,10 @@ on the final report, call `todo({ action: "clear" })`.
    Do not silently choose; do not pretend an alternative does not exist.
 3. **Plan the delegation.** Pick the coder tier by signals, not by safety
    (default `kosmos.coder`, escalate to `kosmos.pro-coder` for the heavier
-   cases above). For a typical change, fan out reviewers/auditors/docs in
-   parallel; implementation work adds one of the two coder tiers. Before
+   cases above). For a typical change, fan out the review and the docs work
+   in parallel; implementation work adds one of the two coder tiers. The
+   review gate is `kosmos.code-reviewer` by default, with
+   `kosmos.security-auditor` added only on the triggers in step 7a. Before
    dispatching, capture the project's tooling fingerprint via
    `/skill:project-fingerprint` and include it in the brief — the coder
    uses it to skip re-discovery of test/lint/typecheck commands, pre-commit
@@ -130,29 +132,30 @@ on the final report, call `todo({ action: "clear" })`.
    conflicts (a "blocker" from security outweighs a "major" from review);
    flag anything no specialist covered that you think is risky. Produce the
    consolidated report.
-7. **Ship gates — audit and docs.**
-   a. **Post-implementation audit (gated).** For non-trivial changes — new
-      public API, new module, refactor/migration, or anything touching auth,
-      logging, persistence, performance, or security — fire the
-      `the-cock-of-justice` skill after the implementation children return.
-      It runs a dual-lens (spec + quality) review in parallel and returns an
-      `ACCEPTED` / `WARNING` / `FAIL` verdict. For routine changes, skip this
-      gate; the parallel code-reviewer and security-auditor dispatch is
-      sufficient.
+7. **Ship gates — review and docs.**
+   a. **Review (gated).** Every change passes through `kosmos.code-reviewer`
+      before it ships. Add `kosmos.security-auditor` only when the change
+      touches auth, input handling, secrets, crypto, network, or eval — the
+      same triggers pr-workflow uses. When both apply, run them in one
+      parallel call; they are read-only and independent.
 
-      **Reciprocal verification loop on FAIL/WARNING.** The verdict drives a
-      feedback loop, not a one-shot gate:
+      **The verdict.** Any blocker or critical is fix-first. A major is
+      fix-first unless the user accepts it. Minors and nits are reported and
+      shipped.
 
-      - `ACCEPTED` → proceed to docs gate (7b).
-      - `WARNING` → report concerns to the user; ask whether to fix now or
-        document as known issues. If fixing, re-dispatch the same coder tier
-        with the WARNING findings as the brief.
-      - `FAIL` → re-dispatch the same coder tier with the FAIL findings as
-        the brief. After the coder's fix, re-fire `the-cock-of-justice`.
+      **Re-review loop.** Fix the findings with the same coder tier that
+      produced the change, then re-dispatch the reviewer — and the auditor,
+      if it ran — over the new diff. When the `the-cock-of-justice` verdict
+      ran, re-fire it over the new diff too. Cap at 3 rounds before
+      escalating to the user with a "stuck" report, the same threshold as
+      the coder's own stop-and-ask rule applied one level up. Track each
+      round in `todo`.
 
-      Track each iteration in `todo`. Cap at 3 iterations before escalating
-      to the user with a "stuck" report — same threshold as the coder's own
-      stop-and-ask rule, applied one level up.
+      For non-trivial changes — new public API, new module, refactor or
+      migration, or anything touching auth, logging, persistence,
+      performance, or security — the `the-cock-of-justice` skill also runs
+      after the implementation children return, and its `ACCEPTED` /
+      `WARNING` / `FAIL` verdict gates the change on top of the review.
    b. **Docs (gated).** If the change is user- or developer-facing, ask the
       user before delegating to `kosmos.docs-writer` — do not dispatch
       speculatively. Once approved, scope the brief to specific files

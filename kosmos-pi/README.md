@@ -128,8 +128,9 @@ subagent({
   workflow: "parallel",
   args: {
     tasks: [
-      { agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." },
-      { agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
+      { agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." }
+      // Add { agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
+      // when the diff touches auth, input handling, secrets, crypto, network, or eval.
     ]
   }
 })
