@@ -109,7 +109,7 @@ The `kosmos.orchestrator` agent is meant to be invoked by the parent session. It
 1. Challenge your proposed plan and surface alternatives.
 2. Ask clarifying questions if scope or approach is ambiguous.
 3. Pick the right coder tier (`kosmos.coder` vs `kosmos.pro-coder`) based on signals, not safety.
-4. Fan out specialists in parallel via `subagent(tasks: [...])`.
+4. Fan out specialists in parallel via a single `subagent({ workflowScript: ..., async: true })` call whose script uses `runs.all`.
 5. Synthesize their findings into one consolidated report with a ship verdict.
 
 A typical invocation:
@@ -118,6 +118,21 @@ A typical invocation:
 subagent({
   agent: "kosmos.orchestrator",
   task: "Plan and review the change in src/billing/. Branch: feat/usage-based-pricing. Goal: tier-based pricing with metered overages."
+})
+```
+
+Parallel fan-out:
+
+```typescript
+subagent({
+  async: true,
+  workflowScript: `
+    const results = await runs.all([
+      { key: "review", agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." },
+      { key: "audit", agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
+    ]);
+    return results.map(result => result.output);
+  `
 })
 ```
 
@@ -217,8 +232,8 @@ Edit any agent or skill file directly in `agents/` or `skills/`. Restart Pi to p
 To verify frontmatter parses cleanly without launching Pi, use the `pi-subagents` parser directly:
 
 ```bash
-node --experimental-strip-types --no-warnings -e "
-  import('/path/to/pi-subagents/src/agents/frontmatter.ts').then(({ parseFrontmatter }) => {
+node --no-warnings -e "
+  import(process.env.HOME + '/.pi/agent/npm/node_modules/pi-subagents/src/agents/frontmatter.js').then(({ parseFrontmatter }) => {
     import('node:fs').then((fs) => {
       for (const f of fs.readdirSync('./agents')) {
         const { frontmatter } = parseFrontmatter(fs.readFileSync('./agents/' + f, 'utf8'));

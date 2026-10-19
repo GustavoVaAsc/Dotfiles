@@ -27,7 +27,20 @@ Do not fire when:
 
 ## Subagents
 
-Spawn exactly two subagents in parallel via the `subagent(...)` tool (from the `pi-subagents` package) in a single turn. Use the `tasks: [...]` parallel form. Do not serialize them.
+Spawn exactly two subagents in parallel via a SINGLE `subagent(...)` call carrying a `workflowScript` that uses `runs.all`. The legacy top-level `tasks: [...]` form was removed and now fails at launch — do not use it. Do not serialize the two reviewers; do not issue two separate top-level `subagent(...)` calls. Both reviewer briefs are launched together inside `runs.all`.
+
+```js
+subagent({
+  async: true,
+  workflowScript: `
+    const results = await runs.all([
+      { key: "spec", agent: "kosmos-security-auditor", task: "<spec reviewer brief>" },
+      { key: "quality", agent: "kosmos-security-auditor", task: "<quality reviewer brief>" }
+    ]);
+    return results.map(result => result.output);
+  `
+});
+```
 
 ### Preferred: kosmos-security-auditor (×2)
 
@@ -67,7 +80,7 @@ The quality reviewer is NOT doing a full security audit. If the user wants that,
 
 ## Spawning the subagents
 
-Both `subagent(...)` calls must be issued in the same assistant turn. Each brief must be self-contained:
+Both reviewer briefs are launched together by the one `workflowScript` call. Each brief must be self-contained:
 
 - The change or plan being reviewed.
 - The files in scope (paths).
@@ -76,6 +89,8 @@ Both `subagent(...)` calls must be issued in the same assistant turn. Each brief
 - The instruction to use the output format below.
 
 Do not give either subagent context that depends on the other — they cannot share state.
+
+`runs.all` returns an **ordered array** (index 0 = spec reviewer, index 1 = quality reviewer), not a key map.
 
 ### Subagent output format
 

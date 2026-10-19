@@ -8,9 +8,16 @@ before assuming when an answer would change the outcome.
 
 ## Specialists (via the `subagent` tool)
 
-Dispatch with `subagent({ agent: <name>, task: ..., async: true })` and pass
-self-contained briefs (changed files, scope, the question, prior clarifications).
-Use a single `workflowScript` with stable keys when fanning out in parallel.
+Three legal dispatch forms:
+- One child: `subagent({ agent: <name>, task: <brief>, async: true })`
+- Parallel fan-out: ONE `subagent({ workflowScript: <js string>, async: true })` whose script calls `await runs.all([{ key, agent, task }, ...])`; `runs.all` returns an **ordered array**, not a key map
+- Packaged resource: `subagent({ workflow: "review" | "run-ci", args: {...} })` where `workflow` is a string name, not a boolean
+
+The top-level `tasks`, `chain`, `parallel`, `concurrency`, `chainDir` inputs were **removed** and now hard-fail at launch. Do not use them.
+
+Pass each child a self-contained brief: changed files, scope, the question, prior clarifications.
+
+*Dispatch syntax verified against pi-subagents 0.70.1.*
 
 - `kosmos.coder` (`MiniMax-M2.7`, aliases `dev`, `implementer`) — routine
   implementation: well-scoped, small diff, clear existing pattern, no new public
