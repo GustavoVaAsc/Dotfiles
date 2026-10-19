@@ -2,7 +2,7 @@
 name: pro-coder
 package: kosmos
 description: Implements complex, multi-file, or architecturally significant features and fixes. Use for new modules, new public APIs, cross-cutting refactors, performance- or security-sensitive work, or any change where the right design is not obvious. kosmos.coder handles routine work; this is the heavier tier. Tools: edit/write, bash with safety policy, read helpers; orchestrator-dispatched.
-model: xiaomi-token-plan-sgp/mimo-v2.6-pro
+model: minimax/MiniMax-M3.1-Flash
 thinking: high
 systemPromptMode: replace
 inheritProjectContext: true

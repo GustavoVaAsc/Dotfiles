@@ -1,8 +1,8 @@
 {
   "lastChangelogVersion": "1.1.0",
   "theme": "kosmos",
-  "defaultProvider": "xiaomi-token-plan-sgp",
-  "defaultModel": "mimo-v2.6-pro",
+  "defaultProvider": "minimax",
+  "defaultModel": "MiniMax-M3.1-Flash",
   "defaultThinkingLevel": "high",
   "packages": [
     "npm:pi-mcp-adapter",

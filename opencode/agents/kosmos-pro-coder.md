@@ -1,7 +1,7 @@
 ---
 description: Implements complex, multi-file, or architecturally significant features and fixes. Use for new modules, new public APIs, cross-cutting refactors, performance- or security-sensitive work, or any change where the right design is not obvious. kosmos-coder handles routine work; this is the heavier tier. Permissions: bash allowlist with ask catch-all; edit all files; webfetch denied.
 mode: subagent
-model: minimax/MiniMax-M3
+model: minimax/MiniMax-M3.1-Flash
 temperature: 0.1
 steps: 120
 permission:

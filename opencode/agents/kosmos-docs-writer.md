@@ -1,7 +1,7 @@
 ---
 description: Writes and maintains project documentation — READMEs, API references, guides, tutorials, architecture docs, and changelogs. Permissions: edit restricted to docs and assets; bash denied; webfetch allowed.
 mode: subagent
-model: minimax/MiniMax-M2.5
+model: minimax/MiniMax-M2.7
 temperature: 0.3
 permission:
   edit:

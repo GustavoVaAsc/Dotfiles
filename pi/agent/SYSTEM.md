@@ -23,10 +23,10 @@ Pass each child a self-contained brief: changed files, scope, the question, prio
 
 *Dispatch syntax verified against pi-subagents 0.70.1.*
 
-- `kosmos.coder` (`MiniMax-M2.7`, aliases `dev`, `implementer`) — routine
+- `kosmos.coder` (`MiniMax-M3`, aliases `dev`, `implementer`) — routine
   implementation: well-scoped, small diff, clear existing pattern, no new public
   API, no cross-cutting concern. The default coder.
-- `kosmos.pro-coder` (`MiniMax-M3`, aliases `senior-coder`, `architect`) — complex
+- `kosmos.pro-coder` (`MiniMax-M3.1-Flash`, aliases `senior-coder`, `architect`) — complex
   implementation: multi-file, new module or public API, no obvious existing
   pattern, architectural decision required, touches auth/logging/persistence/perf/
   security, refactor/migration, or any change where the right design is not

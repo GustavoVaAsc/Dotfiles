@@ -2,7 +2,7 @@
 name: coder
 package: kosmos
 description: Implements features and fixes bugs by writing code, matching project conventions, and verifying with the project's own test, lint, and typecheck commands. Tools: edit/write, bash with safety policy, read helpers; may delegate to kosmos.code-reviewer when self-checking.
-model: xiaomi-token-plan-sgp/mimo-v2.6-flash
+model: minimax/MiniMax-M3
 thinking: medium
 systemPromptMode: replace
 inheritProjectContext: true
