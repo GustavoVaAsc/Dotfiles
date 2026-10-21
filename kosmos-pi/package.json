@@ -1,7 +1,7 @@
 {
   "name": "kosmos-pi",
   "version": "0.3.0",
-  "description": "Portable Pi package shipping the kosmos-* agent team and supporting skills — senior engineering specialists (code reviewer, security auditor, docs writer, routine and pro coders, orchestrator) plus PR workflow and dual-lens verdict skills.",
+  "description": "Portable Pi package shipping the kosmos-* agent team and supporting skills — senior engineering specialists (code reviewer, security auditor, docs writer, coder, orchestrator) plus PR workflow and dual-lens verdict skills.",
   "keywords": [
     "pi-package",
     "pi",
