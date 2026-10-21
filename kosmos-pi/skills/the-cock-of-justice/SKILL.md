@@ -22,7 +22,7 @@ Do not fire when:
 - A routine single-lens code review is enough — use kosmos.code-reviewer.
 - The user only wants security review — use kosmos.security-auditor.
 - The user only wants documentation — use kosmos.docs-writer.
-- The work is to write code, not to judge it — use kosmos.coder or kosmos.pro-coder.
+- The work is to write code, not to judge it — use kosmos.coder.
 
 This skill is opt-in: it is never fired as part of a default ship gate.
 
@@ -177,7 +177,7 @@ Do not include a "ship verdict" or "fix-first / block" line — the verdict alre
 - **Self-contained briefs.** Each subagent gets the full picture. Do not forward-reference "see the spec review" or "see the other report".
 - **Strict verdict rubric.** Do not soften a FAIL to a WARNING because the change is small. Do not promote a WARNING to ACCEPTED because the user is in a hurry. The rubric is the rubric.
 - **Cite, do not paraphrase.** Every finding references `file_path:line`. Findings without a citation get sharpened or dropped during synthesis.
-- **Read-only.** This skill does not edit files, run tests, or commit. The verdict is the deliverable. If the user asks for revision, route to kosmos.coder or kosmos.pro-coder after the verdict is delivered.
+- **Read-only.** This skill does not edit files, run tests, or commit. The verdict is the deliverable. If the user asks for revision, route to kosmos.coder after the verdict is delivered.
 - **No emojis, no fluff.** The output is read by an engineer under time pressure. Plain prose.
 - **Surface disagreement.** If the two reviewers disagree on severity or shippability, surface that explicitly in the summary. Do not pick a number silently.
 - **Stay quiet on adjacent topics.** This skill does not write docs, run security audits, or implement code. If a reviewer drifts into another role's territory, keep the relevant findings and discard the rest.

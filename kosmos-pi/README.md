@@ -6,16 +6,15 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 ## What's inside
 
-### Agents (6)
+### Agents (5)
 
-| Agent | Tier | Mode | Purpose |
+| Agent | Model | Mode | Purpose |
 |---|---|---|---|
-| `kosmos.coder` | MiniMax-M3 | read/write, medium thinking | Routine implementation: small diffs, clear existing patterns, single file or small file set |
-| `kosmos.pro-coder` | MiniMax-M3.1-Flash | read/write, high thinking | Complex work: new modules, public APIs, cross-cutting refactors, perf/security-sensitive changes |
+| `kosmos.coder` | MiniMax-M3.1-Flash | read/write, high thinking | Implementation of any size: features, fixes, refactors, new modules, new public APIs |
 | `kosmos.code-reviewer` | MiniMax-M3.1-Flash | read-only, high thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
 | `kosmos.security-auditor` | MiniMax-M3.1-Flash | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit |
 | `kosmos.docs-writer` | MiniMax-M2.7 | read-only, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
-| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read-only, high thinking | Senior tech-lead: challenges the plan, picks the right coder tier, fans out specialists in parallel via `subagent(...)` |
+| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read-only, high thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)` |
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
 
@@ -42,7 +41,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 4. Syncs `~/Dotfiles/mcp/` → `~/.config/mcp/` (`mcp.json` only).
 5. Reports what changed. Safe to re-run.
 
-After running it, restart Pi. The 6 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
+After running it, restart Pi. The 5 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
 
 ### From npm (after publishing)
 
@@ -108,7 +107,7 @@ The `kosmos.orchestrator` agent is meant to be invoked by the parent session. It
 
 1. Challenge your proposed plan and surface alternatives.
 2. Ask clarifying questions if scope or approach is ambiguous.
-3. Pick the right coder tier (`kosmos.coder` vs `kosmos.pro-coder`) based on signals, not safety.
+3. Delegate implementation to one coder that handles work of any size, with a brief that states the goal.
 4. Fan out independent specialists in parallel via `subagent({ workflow: "parallel", args: { tasks: [...] } })`.
 5. Synthesize their findings into one consolidated report with a ship verdict.
 
@@ -167,7 +166,6 @@ Dotfiles/
     ├── agents/                # Declared under pi-subagents.agents
     │   ├── orchestrator.md
     │   ├── coder.md
-    │   ├── pro-coder.md
     │   ├── code-reviewer.md
     │   ├── security-auditor.md
     │   └── docs-writer.md
@@ -204,7 +202,7 @@ These agents were ported from OpenCode (`.config/opencode/agents/*.md`) to Pi's 
 | `temperature: 0.1` | `thinking: high` |
 | `temperature: 0.2-0.3` | `thinking: medium` |
 | `steps: N` | `turnBudget: { maxTurns: N, graceTurns: N/4 }` |
-| `permission.task: "agent": allow` | Removed for the coder tiers — they have no `subagent` tool. `kosmos.orchestrator` keeps it and dispatches the specialists itself. |
+| `permission.task: "agent": allow` | Removed for the coder — it has no `subagent` tool. `kosmos.orchestrator` keeps it and dispatches the specialists itself. |
 | `permission.question: allow` | Removed — no Pi equivalent for subagents |
 | `model: provider/X` | `model: X` (Pi uses `defaultProvider` from settings) |
 | `color`, `webfetch` | Removed (cosmetic / non-equivalent) |

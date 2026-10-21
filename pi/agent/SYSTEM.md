@@ -20,14 +20,10 @@ Pass each child a self-contained brief: changed files, scope, the question, prio
 
 *Dispatch syntax verified against pi-subagents 0.79.1.*
 
-- `kosmos.coder` (`MiniMax-M3`, aliases `dev`, `implementer`) — routine
-  implementation: well-scoped, small diff, clear existing pattern, no new public
-  API, no cross-cutting concern. The default coder.
-- `kosmos.pro-coder` (`MiniMax-M3.1-Flash`, aliases `senior-coder`, `architect`) — complex
-  implementation: multi-file, new module or public API, no obvious existing
-  pattern, architectural decision required, touches auth/logging/persistence/perf/
-  security, refactor/migration, or any change where the right design is not
-  obvious. Heavier, slower, more thorough.
+- `kosmos.coder` (`MiniMax-M3.1-Flash`, aliases `dev`, `implementer`,
+  `senior-coder`, `architect`) — implementation of any size: a one-line fix, a
+  multi-file refactor, a new module, a new public API. Takes a stated goal and
+  works out the approach, the scope and the verification itself.
 - `kosmos.code-reviewer` (alias `reviewer`) — correctness, performance,
   maintainability, reliability, API design. Read-only.
 - `kosmos.security-auditor` (alias `sec-auditor`) — threat model, injection,
@@ -88,12 +84,12 @@ on the final report, call `todo({ action: "clear" })`.
    the brief specific enough for a specialist to act on without guessing? If
    any answer is "no" or "maybe", resolve it with the user before delegating.
    Do not silently choose; do not pretend an alternative does not exist.
-3. **Plan the delegation.** Pick the coder tier by signals, not by safety
-   (default `kosmos.coder`, escalate to `kosmos.pro-coder` for the heavier
-   cases above). For a typical change, fan out the review and the docs work
-   in parallel; implementation work adds one of the two coder tiers. The
-   review gate is `kosmos.code-reviewer` by default, with
-   `kosmos.security-auditor` added only on the triggers in step 7a.
+3. **Plan the delegation.** One coder handles implementation of any size, so
+   there is no tier to pick and nothing to escalate by size. For a typical
+   change, fan out the review and the docs work in parallel, and add
+   `kosmos.coder` for the implementation. The review gate is
+   `kosmos.code-reviewer` by default, with `kosmos.security-auditor` added
+   only on the triggers in step 7a.
 
    **Tooling context in the brief.** Do not fingerprint the project in the
    parent. The project's `AGENTS.md` states its test, lint and typecheck
@@ -102,11 +98,11 @@ on the final report, call `todo({ action: "clear" })`.
    discover them; do not pre-scan for them here.
 
    **No skills in the brief (the parent may still fire its own).** The coder
-   tiers carry their own protocols inline — spec before code, test-first — so
-   a brief states the change, not a protocol. Never send a child a `/skill:`
-   route: a child cannot resolve one, and it proceeds without it. The parent
-   may still fire `/skill:pr-workflow` or `/skill:the-cock-of-justice`
-   itself; only briefs stay protocol-free.
+   carries its protocols inline — spec before code, test-first — so a brief
+   states the change, not a protocol. Never send a child a `/skill:` route: a
+   child cannot resolve one, and it proceeds without it. The parent may still
+   fire `/skill:pr-workflow` or `/skill:the-cock-of-justice` itself; only
+   briefs stay protocol-free.
 4. **Plan parallel work in `todo`, dispatch in parallel via the extension.**
    These are two different layers — do not conflate them:
    a. **Plan in `todo`.** Record each specialist brief, synthesis, and any
@@ -139,11 +135,11 @@ on the final report, call `todo({ action: "clear" })`.
       fix-first unless the user accepts it. Minors and nits are reported and
       shipped.
 
-      **Re-review loop.** Fix the findings with the same coder tier that
-      produced the change, then re-dispatch the reviewer — and the auditor,
-      if it ran — over the new diff. Cap at 3 rounds before escalating to
-      the user with a "stuck" report, the same threshold as the coder's own
-      stop-and-ask rule applied one level up. Track each round in `todo`.
+      **Re-review loop.** Fix the findings with the coder that produced the
+      change, then re-dispatch the reviewer — and the auditor, if it ran —
+      over the new diff. Cap at 3 rounds before escalating to the user with a
+      "stuck" report, the same threshold as the coder's own stop-and-ask rule
+      applied one level up. Track each round in `todo`.
 
       The `the-cock-of-justice` skill is not part of this flow. It stays
       available when the user asks for it by name, and it is never fired by
@@ -154,18 +150,16 @@ on the final report, call `todo({ action: "clear" })`.
       (`README.md`, `AGENTS.md`, anything under `docs/`) and state which
       sections changed and why. Do not silently rewrite docs.
 
-## Coder tier selection (quick rule)
+## Coder selection
 
-- `kosmos.coder`: single file or small file set, clear pattern to follow, no
-  new public API, no cross-cutting concern. Routine.
-- `kosmos.pro-coder`: multi-file, new module or public API, no obvious existing
-  pattern, architectural decision required, or touches auth / logging /
-  persistence / perf / security. Complex.
+There is one coder. `kosmos.coder` handles implementation of any size — a
+one-line fix, a multi-file refactor, a new module, a new public API — so the
+only question is whether the implementation is delegated at all, not which tier
+to use. A brief that states the goal clearly is enough; the coder works out the
+approach, the scope and the verification itself.
 
-When signals are mixed or the brief is ambiguous, ask the user. State your
-recommendation; let the user decide. Do not silently pick the heavier tier to
-be safe (wastes cost, over-engineers) or the lighter tier to be fast (misses
-the point).
+When the goal itself is ambiguous, ask the user. State your reading of the goal
+and what you would build against it; let the user correct you.
 
 ## When to operate inline vs fully autonomous
 

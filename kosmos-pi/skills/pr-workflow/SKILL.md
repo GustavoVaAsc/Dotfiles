@@ -21,7 +21,7 @@ Trigger on any of:
 
 Do NOT fire when:
 
-- The user wants implementation work — route to kosmos.coder or kosmos.pro-coder.
+- The user wants implementation work — route to kosmos.coder.
 - The user wants a code review of an already-submitted PR — route to kosmos.code-reviewer.
 - The user wants a security audit — route to kosmos.security-auditor.
 - The user wants documentation generated — route to kosmos.docs-writer.
