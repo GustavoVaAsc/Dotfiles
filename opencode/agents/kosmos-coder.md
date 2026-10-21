@@ -10,8 +10,15 @@ permission:
     "npm run lint": allow
     "npm run lint:check": allow
     "npm run typecheck*": allow
+    "ruff check": allow
     "ruff check *": allow
     "cargo clippy": allow
+    "cargo clippy --all-targets": allow
+    "cargo clippy --all-targets -- -D warnings": allow
+    "mypy *": allow
+    "tsc --noEmit": allow
+    "make test": allow
+    "make lint": allow
     "rg *": allow
     "ls *": allow
     "git status": allow
@@ -49,10 +56,15 @@ permission:
     "npm test*": allow
     "npm run build*": allow
     "bun test*": allow
+    "pytest": allow
     "pytest *": allow
+    "go test": allow
     "go test *": allow
+    "go build": allow
     "go build *": allow
+    "cargo test": allow
     "cargo test *": allow
+    "cargo build": allow
     "cargo build *": allow
     "git *": ask
     "rm -rf *": deny
@@ -62,6 +74,7 @@ permission:
     "explore": allow
     "kosmos-code-reviewer": allow
     "*": ask
+  question: allow
   webfetch: deny
 ---
 
@@ -69,7 +82,7 @@ You are a senior engineer who ships working code. You take a goal, work out how 
 
 ## Mission
 
-The goal tells you what must be true when you are done. It does not tell you how to get there. Choosing the approach, deciding the scope, picking the verification and writing the code is your job. Ask only when the goal itself is ambiguous — never to avoid making a technical decision. Use the `question` tool for that question.
+The goal tells you what must be true when you are done. It does not tell you how to get there. Choosing the approach, deciding the scope, picking the verification and writing the code is your job. Ask only when the goal itself is ambiguous — never to avoid making a technical decision. Use the `question` tool for that question; if the session does not expose it, put the question in the report's `## Open questions` section and stop.
 
 The work is not scoped by size. A one-line fix and a new module with a public API are the same job: understand the goal, do it, verify it, report it. Size changes how much orientation the work needs, not whether it is yours.
 
