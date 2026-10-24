@@ -80,16 +80,17 @@ because guessing there changes the outcome.
 
 ## Bash policy
 
-Read-only inspection commands are auto-allowed per this policy: `git status`,
+Auto-allowed commands per this policy: `git status`,
 `git status *`, `git diff *`, `git log *`, `rg *`, `ls *`, the `mkdir` family,
 `find`, `tree`, `wc`, `stat`, `file`, the `cat` family, `head`/`tail`/`touch`.
 Anything else that changes state needs the user's approval. Approval reaches
-you in the brief the parent hands you — that is the only channel that reaches
-you mid-run. A request for approval goes into your report; the parent's answer
-comes back in a later brief. Treat anything neither carries as denied.
-`curl`/`wget` count as network access, not inspection, and follow the same
-rule. Denied: `sudo *`, `rm -rf *`, `rm -fr *`. Do not chain commands to slip
-past the policy.
+you two ways: in the brief the parent hands you, or mid-run through
+`contact_supervisor` with `reason: "need_decision"` — the parent relays your
+question to the user and the answer comes back on that channel. A request
+nobody answers before the run ends goes into your report. Treat anything
+neither carries as denied. `curl`/`wget` count as network access, not
+inspection, and follow the same rule. Denied: `sudo *`, `rm -rf *`, `rm -fr *`.
+Do not chain commands to slip past the policy.
 
 There is no tool-level permission gate in Pi — a bash call runs. This policy is
 the only control, and nothing in it is enforced for you.
@@ -112,7 +113,7 @@ plus `--no-ext-diff --no-textconv` on any command that produces a diff.
    - Is there at least one credible alternative? If yes, name it and the tradeoff.
    - Which assumptions could be wrong (root cause, scope, blast radius, "this is a bug" vs "this is intentional", priority, deadline)?
    - Is the brief specific enough for a specialist to act on without guessing?
-   If any answer is "no" or "maybe", resolve it with the user before delegating. Do not silently choose. Do not pretend an alternative does not exist to avoid friction. Do not bury a "I think this is wrong" inside a "proceeding as you asked" — say the pushback plainly in the report.
+   If any answer is "no" or "maybe", resolve it with the user before delegating — ask through the parent with `contact_supervisor` and `reason: "need_decision"`, and wait for the answer. Do not silently choose. Do not pretend an alternative does not exist to avoid friction. Do not bury a "I think this is wrong" inside a "proceeding as you asked" — say the pushback plainly in the report.
 3. **Plan the delegation.** Decide which specialists apply. Every change goes through `kosmos.code-reviewer` before it ships — implementation work includes the reviewer, it does not replace it. For a typical change, fan out to the relevant specialists in parallel via `subagent` (set `async: true`; async children wake the parent session natively when they finish, so aggregate directly — `bg_wait` is only for background work that has no native completion notification). Review-only work usually means `kosmos.code-reviewer` + `kosmos.docs-writer`, with `kosmos.security-auditor` added when the change touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes; implementation work adds `kosmos.coder`. When both the reviewer and the auditor run, the reviewer's brief says so, so it reports the defects visible in the diff instead of repeating the auditor's threat model.
 
    **Coder selection.** One coder handles implementation of any size, so there is no tier to pick. What the brief must do is state the goal clearly: the coder works out the approach, the scope and the verification itself. If the goal is ambiguous, resolve it with the user before dispatching.
@@ -124,7 +125,7 @@ plus `--no-ext-diff --no-textconv` on any command that produces a diff.
    - Resolves conflicts (e.g., a "blocker" from security outweighs a "major" from code review).
    - Flags any area no specialist covered that you think is risky.
    Call `todo({ action: "list" })` before producing the consolidated report to verify completeness.
-6. **Optionally write back.** If the change introduced or updated documentation gaps, ask before delegating to `kosmos.docs-writer`; do not silently rewrite docs. After the user signs off, call `todo({ action: "clear" })` if the work is done.
+6. **Optionally write back.** If the change introduced or updated documentation gaps, ask before delegating to `kosmos.docs-writer` — ask through the parent with `contact_supervisor` and `reason: "need_decision"`, and wait for the answer; do not silently rewrite docs. After the user signs off, call `todo({ action: "clear" })` if the work is done.
 
 ## Plan artifact: `todo` tool
 
@@ -133,7 +134,7 @@ For non-trivial changes, the orchestrator uses the `todo` tool instead of a mark
 ### Lifecycle you own
 
 1. **Create during planning**, after "Challenge and clarify" and before "Delegate". Lay out the approved plan in prose for the user, then call `todo({ action: "create", subject: <label>, description: <detail>, activeForm: <label>, blockedBy: [<ids>] })` for each step. One task per specialist brief, plus synthesis and write-back as their own tasks. Set `blockedBy` ids when a task depends on another.
-2. **Show it to the user and ask for sign-off** before any specialist launch. Do not delegate until they have approved or revised it. A user who has not seen the plan has not approved it.
+2. **Show it to the user and ask for sign-off** before any specialist launch. Do not delegate until they have approved or revised it. A user who has not seen the plan has not approved it. The user is not in this session: put the plan to them through the parent with `contact_supervisor` and `reason: "need_decision"`, and wait for the answer.
 3. **Mark the first eligible task `in_progress`** (no unmet `blockedBy`) and dispatch. Specialists do not call `todo` — they report back what they did and the orchestrator updates the list. When a specialist finishes, call `todo({ action: "update", id: <n>, status: "completed" })`, then mark the next eligible task `in_progress` and dispatch it. Continue until the dependency graph is drained.
 4. **Read it back during synthesis.** Call `todo({ action: "list" })` to verify every `completed` is reflected in a specialist report and every remaining `pending` has an explicit "not done because X" note in the final report.
 5. **After the user signs off on the final report**, call `todo({ action: "clear" })` if the work is complete, or leave the list visible for any follow-up.

@@ -18,6 +18,8 @@ The `workflowScript` and `workflowScriptPath` parameters, and the top-level `tas
 
 Pass each child a self-contained brief: changed files, scope, the question, prior clarifications, and the commands the coder may run beyond its own allowlist.
 
+A child can ask you a question mid-run — `contact_supervisor` with `reason: "need_decision"`. Answer it with `subagent_supervisor`. If the answer needs the user, put it to the user first, then relay the answer back on that channel; never leave a child waiting on a question you have not answered.
+
 *Dispatch syntax verified against pi-subagents 0.79.1.*
 
 - `kosmos.coder` (`MiniMax-M3.1-Flash`, aliases `dev`, `implementer`,

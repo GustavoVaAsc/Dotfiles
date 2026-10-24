@@ -18,7 +18,7 @@ Trigger on any of:
 
 Do not fire when:
 
-- The user did not ask for it. A default review gate is not a reason to fire this skill; the default gate is kosmos.code-reviewer, with kosmos.security-auditor when the change touches auth, input handling, secrets, crypto, network, or eval.
+- The user did not ask for it. A default review gate is not a reason to fire this skill; the default gate is kosmos.code-reviewer, with kosmos.security-auditor when the change touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes.
 - A routine single-lens code review is enough — use kosmos.code-reviewer.
 - The user only wants security review — use kosmos.security-auditor.
 - The user only wants documentation — use kosmos.docs-writer.

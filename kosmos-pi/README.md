@@ -10,11 +10,11 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 | Agent | Model | Mode | Purpose |
 |---|---|---|---|
-| `kosmos.coder` | MiniMax-M3.1-Flash | read/write, high thinking | Implementation of any size: features, fixes, refactors, new modules, new public APIs |
-| `kosmos.code-reviewer` | MiniMax-M3.1-Flash | read-only, high thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
+| `kosmos.coder` | MiniMax-M3.1-Flash | read/write, medium thinking | Implementation of any size: features, fixes, refactors, new modules, new public APIs |
+| `kosmos.code-reviewer` | MiniMax-M3.1-Flash | read-only, medium thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
 | `kosmos.security-auditor` | MiniMax-M3.1-Flash | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit |
-| `kosmos.docs-writer` | MiniMax-M2.7 | read-only, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
-| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read-only, high thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)` |
+| `kosmos.docs-writer` | MiniMax-M2.7 | read/write, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
+| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read/write, high thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)`; edits plans, docs and config inline when the change is small |
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
 
@@ -130,7 +130,9 @@ subagent({
     tasks: [
       { agent: "kosmos.code-reviewer", task: "Review the diff in src/auth/login.ts for the last 3 commits." }
       // Add { agent: "kosmos.security-auditor", task: "Audit the same diff for security issues." }
-      // when the diff touches auth, input handling, secrets, crypto, network, or eval.
+      // when the diff touches auth, input handling, secrets, crypto, network, eval,
+      // path traversal, deserialization, XSS or CSRF, log injection, rate limits,
+      // abuse controls, or session and token lifetimes.
     ]
   }
 })
