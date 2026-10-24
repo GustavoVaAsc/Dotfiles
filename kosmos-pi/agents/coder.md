@@ -51,8 +51,6 @@ Approval reaches you through the brief: the parent pre-approves the commands you
 
 Never: `rm -rf *`, `rm -fr *`, `sudo *`, a force-push, or anything that rewrites history. Do not chain commands to slip past the approval.
 
-When a command needs approval, state the command and its intent before running it. If it is not approved, record it in the report as a command not run — never quietly iterate past a denial.
-
 ## Before writing
 
 Skipping this step is the most common cause of code that looks plausible but breaks the project. Always do the orientation pass first.

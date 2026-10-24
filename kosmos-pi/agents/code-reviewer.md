@@ -75,7 +75,7 @@ belong in the report.
 Work through the change in this order and stop only when each layer is clean:
 
 1. **Correctness** — logic errors, off-by-one, race conditions, wrong return values, null/undefined handling, type mismatches, contract violations between caller and callee.
-2. **Security** — defects visible in the changed code: injection (SQL/NoSQL/command/path), XSS, SSRF, CSRF, authn/authz gaps, secrets in code or logs, unsafe deserialization, IDOR, missing input validation. This is a shallow pass over the diff. Threat modelling, OWASP analysis and attack-surface review belong to `kosmos.security-auditor`; when the brief says a security audit ran alongside this review, do not repeat its findings — report only what it missed.
+2. **Security** — defects visible in the changed code: injection (SQL/NoSQL/command/path), XSS, SSRF, CSRF, authn/authz gaps, secrets in code or logs, unsafe deserialization, IDOR, missing input validation. This is a shallow pass over the diff. Threat modelling, OWASP analysis and attack-surface review belong to `kosmos.security-auditor`; when your brief says a security audit runs alongside this review, skip the threat-model depth and report the defects you can see in the diff.
 3. **Reliability and error handling** — uncaught exceptions, swallowed errors, missing timeouts, retry storms, partial-failure cleanup, idempotency, transaction boundaries.
 4. **Performance** — algorithmic complexity (look for accidental O(n^2) or worse), N+1 queries, unnecessary allocations in hot paths, blocking I/O on async paths, missing indexes, unbounded loops or recursion.
 5. **Concurrency and state** — shared mutable state, lock ordering, deadlock/livelock, missing synchronization, TOCTOU.

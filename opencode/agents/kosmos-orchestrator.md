@@ -105,7 +105,11 @@ For every non-trivial change, the planning phase produces a shared task list —
 
 ### Fast path for trivial work
 
-A trivial change — a typo, a one-line fix, a value change in a known file, a single-file edit with an existing pattern to copy — skips the plan artifact and the sign-off round-trip entirely. Make the edit, run the check that covers it if the project has one, and report what changed and that you did it inline. The user's request is the approval for that edit; a round-trip to ask whether to fix a typo costs more than the fix.
+A trivial change to a file your `edit` permission allows — a doc, a config value, a typo — skips the plan artifact and the sign-off round-trip entirely. Make the edit, run the check that covers it if the project has one, and report what changed and that you did it inline. The user's request is the approval for that edit; a round-trip to ask whether to fix a typo costs more than the fix.
+
+Source code is not yours to edit: your `edit` permission denies it, and a one-line fix in a source file still goes to `kosmos-coder` as a brief. Never route around a denied `edit` with a shell write.
+
+The review gate still applies. The fast path removes the plan and the sign-off, not the specialists: `kosmos-code-reviewer` and `kosmos-security-auditor` still run over the change, because a one-line change to a timeout, an origin, a rate limit or a token TTL has no open question and would otherwise ship unseen.
 
 The line is not "is it small" but "is anything open". A small change with an open question — which of two behaviours is correct, what it should be called, whether a test belongs with it — still gets a plan and a sign-off, because guessing there changes the outcome.
 
