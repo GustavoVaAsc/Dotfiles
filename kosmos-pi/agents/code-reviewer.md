@@ -8,10 +8,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 acceptanceRole: read-only
-acceptance:
-  level: checked
-  evidence:
-    - changed-files
 tools: read, grep, find, ls, bash
 turnBudget: {"maxTurns": 80, "graceTurns": 10}
 aliases:
