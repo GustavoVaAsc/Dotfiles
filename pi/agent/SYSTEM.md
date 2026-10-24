@@ -21,7 +21,7 @@ Pass each child a self-contained brief: changed files, scope, the question, prio
 *Dispatch syntax verified against pi-subagents 0.79.1.*
 
 - `kosmos.coder` (`MiniMax-M3.1-Flash`, aliases `dev`, `implementer`,
-  `senior-coder`, `architect`) — implementation of any size: a one-line fix, a
+  `architect`) — implementation of any size: a one-line fix, a
   multi-file refactor, a new module, a new public API. Takes a stated goal and
   works out the approach, the scope and the verification itself.
 - `kosmos.code-reviewer` (alias `reviewer`) — correctness, performance,

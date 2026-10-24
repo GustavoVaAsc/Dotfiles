@@ -2,8 +2,12 @@
  * agent-name-hint.ts
  *
  * Shows the active persona (derived from the first heading of the system prompt)
- * together with the active model in the TUI footer, and updates the terminal tab
- * title to match.
+ * in the TUI footer status line, and updates the terminal tab title with the
+ * persona and the active model.
+ *
+ * The footer itself already renders the active model on its stats line, so the
+ * status carries the persona only — repeating the model there would print it
+ * twice on the same screen.
  *
  * Auto-loaded by Pi from ~/.pi/agent/extensions/agent-name-hint.ts.
  *
@@ -71,18 +75,16 @@ export default function (pi: ExtensionAPI) {
 		const persona = derivePersona(prompt);
 		const theme = ui.theme;
 		const dot = tint(theme, "accent", "●");
-		const sep = tint(theme, "dim", " · ");
-		const modelText = modelId ? `${sep}${modelId}` : "";
-		ui.setStatus(STATUS_KEY, `${dot} ${persona}${modelText}`);
+		ui.setStatus(STATUS_KEY, `${dot} ${persona}`);
 		ui.setTitle(`pi · ${persona}${modelId ? ` (${modelId})` : ""}`);
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
-		apply(ctx.getSystemPrompt(), undefined, ctx.ui);
+		apply(ctx.getSystemPrompt(), ctx.model?.id, ctx.ui);
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
-		apply(ctx.getSystemPrompt(), undefined, ctx.ui);
+		apply(ctx.getSystemPrompt(), ctx.model?.id, ctx.ui);
 	});
 
 	pi.on("model_select", async (event, ctx) => {

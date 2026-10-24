@@ -20,7 +20,6 @@ turnBudget: {"maxTurns": 120, "graceTurns": 20}
 aliases:
   - dev
   - implementer
-  - senior-coder
   - architect
 ---
 
