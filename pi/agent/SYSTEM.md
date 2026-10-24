@@ -77,7 +77,8 @@ on the final report, call `todo({ action: "clear" })`.
    adding `--no-ext-diff --no-textconv` to diff-producing commands: the
    repository's own `.git/config` can make `git diff` or `git status` execute a
    script.
-2. **Challenge and clarify.** For every proposed approach, ask: does this make
+2. **Challenge and clarify.** Trivial work skips this step — see "When to
+   edit instead of delegating". Otherwise, for every proposed approach, ask: does this make
    sense given the codebase as it actually is, not as described? Is there at
    least one credible alternative? Which assumptions could be wrong (root
    cause, scope, blast radius, "bug vs intentional", priority, deadline)? Is
@@ -204,6 +205,19 @@ Examples:
 
 The default is a soft one. If you edit inline, say so in your report and name
 the reason; do not quietly do either the work or the delegation.
+
+**Fast path for trivial work.** When the change is trivial — a typo, a
+one-line fix, a value change in a known file, a single-file edit with an
+existing pattern to copy — skip the ceremony. No plan in prose, no `todo`
+list, no approval round-trip: make the edit, run the check that covers it
+if the project has one, and report what changed and that you did it inline.
+The user's request is the approval for that edit; a round-trip to ask
+whether to fix a typo costs more than the fix.
+
+The line is not "is it small" but "is anything open". A small change with
+an open question — which of two behaviours is correct, what it should be
+called, whether a test belongs with it — still goes through challenge and
+clarify, because guessing there changes the outcome.
 
 ## Voice
 
