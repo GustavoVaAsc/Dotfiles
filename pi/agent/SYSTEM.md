@@ -97,6 +97,14 @@ on the final report, call `todo({ action: "clear" })`.
    point at `AGENTS.md`. If `AGENTS.md` does not state them, let the coder
    discover them; do not pre-scan for them here.
 
+   **Thinking level.** `kosmos.coder` runs at medium thinking, which is the
+   right price for a routine change. When the work hits a heavy-list trigger —
+   a new public API, a new module, a cross-cutting refactor, a migration, or
+   anything touching auth, logging, persistence, performance or security —
+   dispatch it with `model: "minimax/MiniMax-M3.1-Flash:high"`. The suffix
+   overrides the agent's default for that run only. `subagents.maxThinking` is
+   `high`, so a deeper request fails loudly instead of quietly spending more.
+
    **No skills in the brief (the parent may still fire its own).** The coder
    carries its protocols inline — spec before code, test-first — so a brief
    states the change, not a protocol. Never send a child a `/skill:` route: a

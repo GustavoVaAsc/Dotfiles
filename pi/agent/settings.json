@@ -3,7 +3,7 @@
   "theme": "kosmos",
   "defaultProvider": "minimax",
   "defaultModel": "MiniMax-M3.1-Flash",
-  "defaultThinkingLevel": "high",
+  "defaultThinkingLevel": "medium",
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
@@ -12,5 +12,9 @@
   ],
   "extensions": [
     "-builtin:mcp"
-  ]
+  ],
+  "subagents": {
+    "defaultThinking": "medium",
+    "maxThinking": "high"
+  }
 }

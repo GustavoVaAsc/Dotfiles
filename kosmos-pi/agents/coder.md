@@ -3,7 +3,7 @@ name: coder
 package: kosmos
 description: Implements any kind of change from a stated goal — feature, fix, refactor, new module, new public API — matching project conventions and verifying with the project's own test, lint and typecheck commands. Tools: edit/write, bash with safety policy, read helpers.
 model: minimax/MiniMax-M3.1-Flash
-thinking: high
+thinking: medium
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
