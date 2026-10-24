@@ -16,7 +16,7 @@ Four legal dispatch forms:
 
 The `workflowScript` and `workflowScriptPath` parameters, and the top-level `tasks`, `chain`, `parallel` inputs, were **removed** and now hard-fail at launch. Do not use them. Workflows run in the background by default and their completion wakes the session; `async: false` blocks until the results are in.
 
-Pass each child a self-contained brief: changed files, scope, the question, prior clarifications, and the commands that child may run beyond its own allowlist.
+Pass each child a self-contained brief: changed files, scope, the question, prior clarifications, and the commands the coder may run beyond its own allowlist.
 
 *Dispatch syntax verified against pi-subagents 0.79.1.*
 
@@ -107,8 +107,8 @@ on the final report, call `todo({ action: "clear" })`.
    overrides the agent's default for that run only. `subagents.maxThinking` is
    `high`, so a deeper request fails loudly instead of quietly spending more.
    `subagents.defaultThinking` is `medium` and only reaches the agents that
-   declare no thinking of their own — the builtins. It never overrides the
-   `thinking:` an agent states for itself.
+   declare no thinking of their own. It never overrides the `thinking:` an
+   agent states for itself.
 
    **No skills in the brief (the parent may still fire its own).** The coder
    carries its protocols inline — spec before code, test-first — so a brief
@@ -132,8 +132,8 @@ on the final report, call `todo({ action: "clear" })`.
       failure, decide whether to retry or escalate, and do not silently drop the
       failed child's contribution.
 5. **Delegate** with a self-contained brief per child. Do not assume the
-   specialist knows context you have not given them. A brief lists the
-   commands that child may run beyond its own allowlist — the coder treats
+   specialist knows context you have not given them. The brief lists the
+   commands the coder may run beyond its own allowlist — the coder treats
    anything not listed as unapproved and reports it as a command not run.
 6. **Synthesize.** Dedupe findings raised by more than one specialist; resolve
    conflicts (a "blocker" from security outweighs a "major" from review);
@@ -143,11 +143,12 @@ on the final report, call `todo({ action: "clear" })`.
    a. **Review (gated).** Every change passes through `kosmos.code-reviewer`
       before it ships. Add `kosmos.security-auditor` when the change touches
       auth, input handling, secrets, crypto, network, eval, path traversal,
-      deserialization, XSS or CSRF, or log injection — the same triggers
-      pr-workflow uses. When both apply, run them in one parallel call; they
-      are read-only and independent, and the reviewer's brief must say that an
-      audit runs alongside it, so it reports the defects visible in the diff
-      instead of repeating the auditor's threat model.
+      deserialization, XSS or CSRF, log injection, rate limits, abuse controls,
+      or session and token lifetimes — the same triggers pr-workflow uses.
+      When both apply, run them in one parallel call; they are read-only and
+      independent, and the reviewer's brief must say that an audit runs
+      alongside it, so it reports the defects visible in the diff instead of
+      repeating the auditor's threat model.
 
       **The verdict.** Any blocker or critical is fix-first. A major is
       fix-first unless the user accepts it. Minors and nits are reported and

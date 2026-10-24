@@ -103,14 +103,16 @@ subagent({
     tasks: [
       { agent: "kosmos.code-reviewer", task: "<code review brief>" }
       // Add { agent: "kosmos.security-auditor", task: "<security audit brief>" }
-      // when the diff touches auth, input handling, secrets, crypto, network, or eval.
+      // when the diff touches auth, input handling, secrets, crypto, network, eval,
+      // path traversal, deserialization, XSS or CSRF, log injection, rate limits,
+      // abuse controls, or session and token lifetimes.
     ]
   }
 });
 ```
 
 - Always: invoke `kosmos.code-reviewer` on `git diff <base>...HEAD`. Treat any blocker or critical as a fix-first.
-- If the diff touches auth, input handling, secrets, crypto, network, or eval: also invoke `kosmos.security-auditor`.
+- If the diff touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes: also invoke `kosmos.security-auditor`.
 - If the diff adds a public API, CLI flag, or new export: also flag API design concerns (naming, error shape, backward compat) for the user to consider — there is no dedicated agent for this.
 
 Then run this checklist. Any unchecked item is a finding to surface:
