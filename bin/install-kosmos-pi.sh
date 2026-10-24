@@ -112,6 +112,17 @@ else
 	exit 1
 fi
 
+# Pi's own MCP config (~/.pi/agent/mcp.json) is a second input to the MCP
+# adapter on Pi 0.99 and later, and it is not managed from this repo. When it
+# lingers it keeps stale servers alive, so remove it: the server list lives in
+# the shared config at ~/.config/mcp/mcp.json, which is symlinked from
+# $DOTFILES_DIR/mcp. Servers added with `pi mcp add` belong in that file.
+PI_NATIVE_MCP="${PI_AGENT_DST}/mcp.json"
+if [ -e "$PI_NATIVE_MCP" ]; then
+	rm -f "$PI_NATIVE_MCP"
+	echo "  ✓ removed stale ~/.pi/agent/mcp.json (servers live in ~/.config/mcp/mcp.json)"
+fi
+
 if rsync -a --delete "$PI_AGENT_SRC/extensions/" "$PI_AGENT_DST/extensions/" >/dev/null 2>&1; then
 	echo "  ✓ synced ~/.pi/agent/extensions/"
 else

@@ -38,7 +38,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
 2. Adds `"file:/home/kosmos/Dotfiles/kosmos-pi"` to `~/.pi/agent/settings.json` if not already present.
 3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp-adapter.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
-4. Syncs `~/Dotfiles/mcp/` → `~/.config/mcp/` (`mcp.json` only).
+4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `install.sh` symlinks to `~/.config/mcp/`.
 5. Reports what changed. Safe to re-run.
 
 After running it, restart Pi. The 5 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
@@ -79,10 +79,10 @@ Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
   - `SYSTEM.md` — parent system prompt injected into all Pi sessions
   - `settings.json` — user preferences, theme, default model, packages list
   - `themes/kosmos.json` — custom theme
-  - `mcp-adapter.json` — per-agent MCP server definitions
+  - `mcp-adapter.json` — MCP adapter settings (footer icon, tool rendering); the server list lives in the shared config below
   - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it alongside the active model in the TUI footer and terminal title
-- `mcp/` — global MCP config:
-  - `mcp.json` — globally available MCP servers
+- `mcp/` — global MCP config, symlinked to `~/.config/mcp/`:
+  - `mcp.json` — globally available MCP servers, the single source of truth for the server list
 
 Re-capture after editing live Pi config (e.g., after changing theme or adding an MCP server). The install script's per-file/per-subtree rsync is intentional: syncing `pi/agent/SYSTEM.md` alone does not wipe `~/.pi/agent/sessions/`, `npm/`, or other Pi state that lives alongside it.
 
@@ -156,7 +156,7 @@ Dotfiles/
 │   └── agent/
 │       ├── SYSTEM.md          # Parent system prompt
 │       ├── settings.json       # User preferences, theme, packages
-│       ├── mcp-adapter.json   # Per-agent MCP servers
+│       ├── mcp-adapter.json   # MCP adapter settings (server list lives in mcp/mcp.json)
 │       └── themes/
 │           └── kosmos.json    # Custom theme
 └── kosmos-pi/                 # The Pi package
