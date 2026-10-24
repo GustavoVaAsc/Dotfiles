@@ -8,8 +8,7 @@
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     "npm:pi-subagents@0.79.1",
-    "npm:@juicesharp/rpiv-todo",
-    "file:/home/kosmos/Dotfiles/kosmos-pi"
+    "npm:@juicesharp/rpiv-todo"
   ],
   "extensions": [
     "-builtin:mcp"
