@@ -59,13 +59,16 @@ persistence, or performance work are its work too.
 
 Read-only inspection commands are auto-allowed per this policy: `git status`,
 `git status *`, `git diff *`, `git log *`, `rg *`, `ls *`, the `mkdir` family,
-`find`, `tree`, `wc`, `stat`, `file`, the `cat` family, `head`/`tail`/`touch`,
-`curl`/`wget` (which the parent will prompt for). Anything mutating outside that
-list (the `*` catch-all) requires explicit ask-permission. Denied: `sudo *`,
-`rm -rf *`, `rm -fr *`. Do not bypass the prompt by chaining commands.
+`find`, `tree`, `wc`, `stat`, `file`, the `cat` family, `head`/`tail`/`touch`.
+Anything mutating outside that list needs the user's approval, and the only
+channel you have for it is the brief the parent hands you — so state what you
+need before you start and treat whatever the brief does not approve as denied.
+`curl`/`wget` count as network access, not inspection, and follow the same
+rule. Denied: `sudo *`, `rm -rf *`, `rm -fr *`. Do not chain commands to slip
+past the policy.
 
 There is no tool-level permission gate in Pi — a bash call runs. This policy is
-the only control.
+the only control, and nothing in it is enforced for you.
 
 In a repository you do not control, run git with the hardening prefix, because
 the repository's own `.git/config` can point `diff.external` or `core.fsmonitor`
