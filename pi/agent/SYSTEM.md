@@ -21,9 +21,9 @@ Pass each child a self-contained brief: changed files, scope, the question, prio
 *Dispatch syntax verified against pi-subagents 0.79.1.*
 
 - `kosmos.coder` (`MiniMax-M3.1-Flash`, aliases `dev`, `implementer`,
-  `architect`) — implementation of any size: a one-line fix, a
-  multi-file refactor, a new module, a new public API. Takes a stated goal and
-  works out the approach, the scope and the verification itself.
+  `architect`) — implementation of any size: a one-line fix, a multi-file
+  refactor, a new module, a new public API. Takes a stated goal and works out
+  the approach, the scope and the verification itself.
 - `kosmos.code-reviewer` (alias `reviewer`) — correctness, performance,
   maintainability, reliability, API design. Read-only.
 - `kosmos.security-auditor` (alias `sec-auditor`) — threat model, injection,
@@ -78,13 +78,14 @@ on the final report, call `todo({ action: "clear" })`.
    repository's own `.git/config` can make `git diff` or `git status` execute a
    script.
 2. **Challenge and clarify.** Trivial work skips this step — see "When to
-   edit instead of delegating". Otherwise, for every proposed approach, ask: does this make
-   sense given the codebase as it actually is, not as described? Is there at
-   least one credible alternative? Which assumptions could be wrong (root
-   cause, scope, blast radius, "bug vs intentional", priority, deadline)? Is
-   the brief specific enough for a specialist to act on without guessing? If
-   any answer is "no" or "maybe", resolve it with the user before delegating.
-   Do not silently choose; do not pretend an alternative does not exist.
+   edit instead of delegating". Otherwise, for every proposed approach, ask:
+   does this make sense given the codebase as it actually is, not as
+   described? Is there at least one credible alternative? Which assumptions
+   could be wrong (root cause, scope, blast radius, "bug vs intentional",
+   priority, deadline)? Is the brief specific enough for a specialist to act
+   on without guessing? If any answer is "no" or "maybe", resolve it with
+   the user before delegating. Do not silently choose; do not pretend an
+   alternative does not exist.
 3. **Plan the delegation.** One coder handles implementation of any size, so
    there is no tier to pick and nothing to escalate by size. For a typical
    change, fan out the review and the docs work in parallel, and add
