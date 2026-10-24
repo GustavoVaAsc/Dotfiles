@@ -5,6 +5,7 @@
 		"purple": "#a855f7",
 		"purpleDim": "#7c3aed",
 		"purpleLight": "#c084fc",
+		"purplePastel": "#d8b4fe",
 		"aqua": "#00ffff",
 		"green": "#4ade80",
 		"red": "#f87171",
@@ -30,7 +31,7 @@
 		"error": "red",
 		"warning": "yellow",
 		"muted": "gray",
-		"dim": "dimGray",
+		"dim": "purplePastel",
 		"text": "text",
 		"thinkingText": "gray",
 
@@ -51,7 +52,7 @@
 
 		"mdHeading": "purpleLight",
 		"mdLink": "purpleLight",
-		"mdLinkUrl": "dimGray",
+		"mdLinkUrl": "#52525b",
 		"mdCode": "purpleLight",
 		"mdCodeBlock": "text",
 		"mdCodeBlockBorder": "darkGray",
