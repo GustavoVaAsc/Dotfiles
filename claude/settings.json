@@ -1,0 +1,11 @@
+{
+  "agent": "kosmos-orchestrator",
+  "theme": "custom:kosmos",
+  "statusLine": {
+    "type": "command",
+    "command": "python3 ~/.claude/kosmos-statusline.py"
+  },
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
+  }
+}

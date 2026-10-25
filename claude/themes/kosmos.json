@@ -1,0 +1,36 @@
+{
+	"name": "Kosmos",
+	"base": "dark",
+	"overrides": {
+		"claude": "#a855f7",
+		"claudeShimmer": "#c084fc",
+		"text": "#e4e4e7",
+		"inactive": "#a1a1aa",
+		"subtle": "#52525b",
+		"suggestion": "#c084fc",
+		"remember": "#d8b4fe",
+		"permission": "#c084fc",
+		"permissionShimmer": "#d8b4fe",
+
+		"success": "#4ade80",
+		"error": "#f87171",
+		"warning": "#facc15",
+
+		"promptBorder": "#7c3aed",
+		"promptBorderShimmer": "#a855f7",
+		"planMode": "#00ffff",
+		"bashBorder": "#4ade80",
+
+		"userMessageBackground": "#1a0d2e",
+		"userMessageBackgroundHover": "#2a1a3e",
+		"bashMessageBackgroundColor": "#1a0d2e",
+		"memoryBackgroundColor": "#1a0d2e",
+		"selectionBg": "#2a1a3e",
+
+		"purple_FOR_SUBAGENTS_ONLY": "#a855f7",
+		"cyan_FOR_SUBAGENTS_ONLY": "#00ffff",
+		"green_FOR_SUBAGENTS_ONLY": "#4ade80",
+		"red_FOR_SUBAGENTS_ONLY": "#f87171",
+		"yellow_FOR_SUBAGENTS_ONLY": "#facc15"
+	}
+}
