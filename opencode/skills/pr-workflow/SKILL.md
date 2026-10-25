@@ -96,7 +96,7 @@ Output the description as a fenced block the user can paste directly.
 
 Before declaring the PR ready, run a self-review pass. Delegate to specialists:
 
-- Always: invoke `kosmos-code-reviewer` on `git diff <base>...HEAD`. Treat any blocker or critical as a fix-first.
+- Always: invoke `kosmos-code-reviewer` on `git diff <base>...HEAD`, unless the diff touches only docs, comments or formatting and can alter no runtime behaviour. Treat any blocker or critical as a fix-first.
 - If the diff touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes: also invoke `kosmos-security-auditor`.
 - If the diff adds a public API, CLI flag, or new export: also flag API design concerns (naming, error shape, backward compat) for the user to consider — there is no dedicated agent for this.
 
