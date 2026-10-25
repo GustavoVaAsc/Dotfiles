@@ -2,18 +2,22 @@
 # install.sh
 # Cross-platform idempotent installer for Dotfiles-managed config.
 # Wires each tracked config (kitty, nvim, opencode, mcp) into ~/.config/
-# via symlinks, then delegates Pi/agent handling to bin/install-kosmos-pi.sh.
+# via symlinks, then delegates Pi/agent handling to bin/install-kosmos-pi.sh and
+# Claude Code agent handling to bin/install-kosmos-claude.sh.
 #
 # Run once on a new machine (or after adding new entries to the manifest):
 #
 #   ~/Dotfiles/install.sh
 #
 # What it does:
-#   1. Parses flags (--help, --dry-run, --only <name>, --no-kosmos-pi, --no-backup).
+#   1. Parses flags (--help, --dry-run, --only <name>, --no-kosmos-pi,
+#      --no-kosmos-claude, --no-backup).
 #   2. For each manifest entry, creates or updates the symlink in ~/.config/.
 #   3. Backs up any existing real directory/file before replacing it
 #      (unless --no-backup is given).
 #   4. Runs bin/install-kosmos-pi.sh unless --no-kosmos-pi is given.
+#   5. Runs bin/install-kosmos-claude.sh unless --no-kosmos-claude is given
+#      (skipped, with a note, when `claude` is not on PATH).
 #
 # Safe to re-run: already-correct symlinks are skipped; backed-up targets
 # are saved to ~/.config/<name>.bak.<timestamp> so reverts are possible.
@@ -33,6 +37,7 @@ HELP=false
 DRY_RUN=false
 ONLY_NAME=""
 NO_KOSMOS_PI=false
+NO_KOSMOS_CLAUDE=false
 NO_BACKUP=false
 KOSMOS_PI_RAN=false
 
@@ -62,19 +67,23 @@ while [[ $# -gt 0 ]]; do
 		NO_KOSMOS_PI=true
 		shift
 		;;
+	--no-kosmos-claude)
+		NO_KOSMOS_CLAUDE=true
+		shift
+		;;
 	--no-backup)
 		NO_BACKUP=true
 		shift
 		;;
 	-*)
 		echo "error: unknown flag: $1" >&2
-		echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-backup]" >&2
+		echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-kosmos-claude] [--no-backup]" >&2
 		exit 2
 		;;
 	*)
 		# No positional arguments expected; anything else is an error
 		echo "error: unexpected argument: $1" >&2
-		echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-backup]" >&2
+		echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-kosmos-claude] [--no-backup]" >&2
 		exit 2
 		;;
 	esac
@@ -83,12 +92,13 @@ done
 # --- usage --------------------------------------------------------------------
 
 if $HELP; then
-	echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-backup]"
+	echo "usage: $0 [--help] [--dry-run] [--only <name>] [--no-kosmos-pi] [--no-kosmos-claude] [--no-backup]"
 	echo ""
 	echo "  --help           Show this help and exit 0."
 	echo "  --dry-run        Print intended actions, modify nothing."
 	echo "  --only <name>    Restrict to one manifest entry by name."
 	echo "  --no-kosmos-pi   Skip the npm + rsync block (pi/agent setup)."
+	echo "  --no-kosmos-claude  Skip the Claude Code agent setup (bin/install-kosmos-claude.sh)."
 	echo "  --no-backup      Replace existing targets without backing up."
 	echo ""
 	echo "Manifest entries: kitty, nvim, opencode, mcp"
@@ -299,6 +309,41 @@ else
 	KOSMOS_PI_SKIPPED=true
 fi
 
+# --- kosmos-claude block -----------------------------------------------------
+
+KOSMOS_CLAUDE_RAN=false
+KOSMOS_CLAUDE_FAILED=false
+KOSMOS_CLAUDE_SKIPPED=false
+KOSMOS_CLAUDE_MISSING=false
+KOSMOS_CLAUDE_EXIT=0
+
+if [[ "$NO_KOSMOS_CLAUDE" == true ]]; then
+	KOSMOS_CLAUDE_SKIPPED=true
+elif ! command -v claude >/dev/null 2>&1; then
+	# Without Claude Code there is nothing to configure; do not create ~/.claude.
+	KOSMOS_CLAUDE_MISSING=true
+else
+	installer="$DOTFILES_DIR/bin/install-kosmos-claude.sh"
+	if [[ ! -f "$installer" ]]; then
+		echo "error: $installer not found" >&2
+		exit 1
+	fi
+
+	if $DRY_RUN; then
+		echo "[dry-run] would run: $installer"
+	else
+		# Run the kosmos-claude installer; it handles its own idempotency
+		claude_status=0
+		bash "$installer" || claude_status=$?
+		if [[ $claude_status -eq 0 ]]; then
+			KOSMOS_CLAUDE_RAN=true
+		else
+			KOSMOS_CLAUDE_FAILED=true
+			KOSMOS_CLAUDE_EXIT=$claude_status
+		fi
+	fi
+fi
+
 # --- summary -----------------------------------------------------------------
 
 echo ""
@@ -314,8 +359,19 @@ elif $KOSMOS_PI_RAN; then
 else
 	echo "  kosmos-pi: not available"
 fi
+if $KOSMOS_CLAUDE_FAILED; then
+	echo "  kosmos-claude: failed (exit $KOSMOS_CLAUDE_EXIT)"
+elif $KOSMOS_CLAUDE_SKIPPED; then
+	echo "  kosmos-claude: skipped (--no-kosmos-claude)"
+elif $KOSMOS_CLAUDE_MISSING; then
+	echo "  kosmos-claude: skipped (claude not on PATH; run bin/install-kosmos-claude.sh after installing it)"
+elif $KOSMOS_CLAUDE_RAN; then
+	echo "  kosmos-claude: ran"
+else
+	echo "  kosmos-claude: not run"
+fi
 
-# Exit non-zero if kosmos-pi failed
-if $KOSMOS_PI_FAILED; then
+# Exit non-zero if kosmos-pi or kosmos-claude failed
+if $KOSMOS_PI_FAILED || $KOSMOS_CLAUDE_FAILED; then
 	exit 1
 fi
