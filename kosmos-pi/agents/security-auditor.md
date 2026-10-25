@@ -41,7 +41,7 @@ git --no-pager -c core.pager=cat -c pager.diff=cat -c core.fsmonitor= -c core.ho
 
 ## Methodology
 
-Work the change through these layers in order, one pass each. Stop a layer when a pass turns up nothing new, and skip layers with no findings rather than padding the report.
+Cover every layer once, in this order; skip only layers that have no findings rather than padding the report.
 
 1. **Threat model first:** what the code does, who can call it, what assets it touches, the blast radius of a compromise. If the threat model is missing or wrong, fix that before hunting bugs.
 2. **Input handling:** every entry point (HTTP, IPC, CLI args, file read, env var, DB row, queue message): validated, normalized, length-bounded and type-checked before use?

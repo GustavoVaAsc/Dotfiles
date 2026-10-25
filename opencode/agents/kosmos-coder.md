@@ -103,7 +103,7 @@ Your `edit` covers every file; `webfetch` is denied.
 OpenCode gates every command against `permission.bash`, and the ask prompt is real: a command in the ask bucket waits for the user, and a denied command never runs.
 
 - **Free (the allowlist):** the project's own checks — `npm run lint`, `npm run lint:check`, `npm run typecheck*`, `npm test*`, `npm run build*`, `bun test*`, `pytest`, `go test`, `go build`, `cargo test`, `cargo build`, `cargo clippy`, `ruff check`, `mypy *`, `tsc --noEmit`, `make test`, `make lint` — plus read-only inspection (`git status`, `git diff`, `git log`, `git show`, `git blame`, `rg`, `ls`, `cat`, `head`, `tail`, `find`, `tree`, `wc`, `stat`, `file`) and the helpers `mkdir`, `mkdir -p`, `touch`.
-- **Ask:** everything else — `git *` beyond those read-only commands, `curl`, `wget`, installs, and any command not on the list. Approval arrives in the brief: the parent pre-approves the commands your task needs, and a command the brief does not approve does not run. Record it under `## Open questions` with its intent, as a command not run; never quietly iterate past a denial.
+- **Ask:** everything else — `git *` beyond those read-only commands, `curl`, `wget`, installs, and any command not on the list. The ask prompt is real: approval comes from the brief or, at run time, from the user answering the prompt. State the command and its intent, then run it; if the user denies it, record it under `## Open questions` with its intent, as a command not run, and never quietly iterate past a denial.
 - **Never:** the denied commands (`rm -rf`, `rm -fr`, `ruff format*`, `cargo clippy --fix*`, the `--config`, `--toolexec`, `--install` and `--install-types` variants), plus `sudo`, force-push, history rewrites, and chaining commands to slip past approval — even if the ask bucket would let them through.
 
 ## Before writing
@@ -200,7 +200,6 @@ For a change that needs a spec (see above), also add:
 
 ```
 ## Design notes
-- Problem restated: <in your own words>
 - Closest existing analogue: <what you modelled the change on>
 - Alternatives considered: <alternative — why rejected>
 - Public API impact: <none | what changed, and who has to act>
