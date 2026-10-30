@@ -23,23 +23,49 @@ const MCP_STATUS_KEY = "mcp";
 /** Minimum gap between the left and the right half of a line. */
 const MIN_PADDING = 2;
 
+/** Context usage bar: cell characters, default width and the degradation ladder. */
+const BAR_FILLED = "█";
+const BAR_EMPTY = "░";
+const BAR_WIDTHS = [12, 8, 6, 4];
+
+/**
+ * A percentage above 100 % is possible (the estimate can exceed the
+ * window), so the ceiling is generous; beyond it the number is not a
+ * percentage.
+ */
+const MAX_CONTEXT_PERCENT = 1000;
+
 type FooterTheme = {
 	fg(style: string, text: string): string;
 };
 
+/**
+ * The session cost, which is the only usage figure the footer shows: the
+ * token counters (input, output, cache reads and writes) and the cache hit
+ * rate are not rendered.
+ */
 type UsageTotals = {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
 	cost: number;
 };
 
 type SessionStats = {
 	totals: UsageTotals;
-	cacheHitRate?: number;
 	contextWindow: number;
+	/** The percentage the readout and the thresholds use; 0 when unknown. */
 	contextPercent: number;
+	/**
+	 * The percentage as reported, but only when it is a usable number: a
+	 * finite value within 0..MAX_CONTEXT_PERCENT. Null for every unusable
+	 * value (no percentage at all, null, NaN, an infinity or an out-of-range
+	 * magnitude). This is the field that gates the bar.
+	 */
+	contextPercentRaw: number | null;
+	/**
+	 * Whether the readout shows a percentage. False when the percentage is
+	 * explicitly null or unusable, in which case the readout shows "?/". An
+	 * absent percentage stays 0.0%, as it always has: a fresh session has
+	 * genuinely used nothing.
+	 */
 	contextKnown: boolean;
 };
 
@@ -47,15 +73,11 @@ type SessionStats = {
 type CountableSessionManager = { getEntryCount?: () => number };
 
 function emptyTotals(): UsageTotals {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	return { cost: 0 };
 }
 
 function addUsage(totals: UsageTotals, usage: any): void {
 	if (!usage) return;
-	totals.input += usage.input ?? 0;
-	totals.output += usage.output ?? 0;
-	totals.cacheRead += usage.cacheRead ?? 0;
-	totals.cacheWrite += usage.cacheWrite ?? 0;
 	totals.cost += usage.cost?.total ?? 0;
 }
 
@@ -66,6 +88,48 @@ function formatTokens(count: number): string {
 	if (count < 1000000) return `${Math.round(count / 1000)}k`;
 	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
 	return `${Math.round(count / 1000000)}M`;
+}
+
+/**
+ * The context percentage, or null when it is not a usable percentage.
+ *
+ * A percentage has to be a finite number within 0..MAX_CONTEXT_PERCENT: an
+ * over-100 % estimate is possible, but a magnitude such as 1e300 is not a
+ * percentage at all. The readout and the bar both follow this one value, so
+ * they can never disagree.
+ */
+function usablePercent(value: number | null | undefined): number | null {
+	if (typeof value !== "number" || !Number.isFinite(value)) return null;
+	if (value < 0 || value > MAX_CONTEXT_PERCENT) return null;
+	return value;
+}
+
+/**
+ * The context usage bar: `width` cells, filled proportionally to the
+ * percentage. A small but non-zero usage still shows one filled cell.
+ *
+ * Returns null for a percentage that is not a finite number: an unknown
+ * percentage gets no bar at all, never an empty one.
+ */
+function contextBar(
+	theme: FooterTheme,
+	percent: number,
+	width: number,
+	color: string,
+): { text: string; painted: string } | null {
+	if (!Number.isFinite(percent)) return null;
+	let filled = Math.round((percent / 100) * width);
+	if (filled > width) filled = width;
+	if (filled < 0) filled = 0;
+	if (percent > 0 && filled === 0) filled = 1;
+	const filledText = BAR_FILLED.repeat(filled);
+	const emptyText = BAR_EMPTY.repeat(width - filled);
+	// The empty cells are muted, not dim: the dim colour is the brightest
+	// one of the theme and would make the unused part the loudest.
+	let painted = "";
+	if (filledText) painted += theme.fg(color, filledText);
+	if (emptyText) painted += theme.fg("muted", emptyText);
+	return { text: filledText + emptyText, painted };
 }
 
 /** Cwd formatting, same as Pi's footer: home-relative with a leading ~. */
@@ -117,15 +181,11 @@ class FooterComponent implements Component {
 		if (cached && cached.key === key) return cached.stats;
 
 		const totals = emptyTotals();
-		let cacheHitRate: number | undefined;
 		for (const entry of sessionManager.getEntries()) {
 			if (entry.type === "usage") {
 				addUsage(totals, (entry as any).usage);
 			} else if (entry.type === "message" && (entry as any).message.role === "assistant") {
-				const usage = (entry as any).message.usage;
-				addUsage(totals, usage);
-				const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-				cacheHitRate = promptTokens > 0 ? (usage.cacheRead / promptTokens) * 100 : undefined;
+				addUsage(totals, (entry as any).message.usage);
 			} else if (entry.type === "message" && (entry as any).message.role === "toolResult" && (entry as any).message.usage) {
 				addUsage(totals, (entry as any).message.usage);
 			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && (entry as any).usage) {
@@ -135,13 +195,22 @@ class FooterComponent implements Component {
 
 		const contextUsage = this.ctx.getContextUsage();
 		const contextWindow = contextUsage?.contextWindow ?? this.ctx.model?.contextWindow ?? 0;
-		const contextPercent = contextUsage?.percent ?? 0;
+		const reportedPercent = contextUsage?.percent;
+		// One value decides whether the reported percentage is usable: it has
+		// to be a finite number within 0..MAX_CONTEXT_PERCENT. A genuine
+		// over-100 % estimate stays visible, but an implausible magnitude is
+		// not a percentage at all. The readout and the bar both follow it.
+		const usable = usablePercent(reportedPercent);
 		const stats: SessionStats = {
 			totals,
-			cacheHitRate,
 			contextWindow,
-			contextPercent,
-			contextKnown: contextUsage?.percent !== null,
+			contextPercent: usable ?? 0,
+			// Null for every unusable value: this is the field that gates the
+			// bar.
+			contextPercentRaw: usable,
+			// An absent percentage is a fresh session, not an unknown one: it
+			// keeps its 0.0% readout, as the built-in footer does.
+			contextKnown: usable !== null || reportedPercent === undefined,
 		};
 		this.cache = { key, stats };
 		return stats;
@@ -158,33 +227,30 @@ class FooterComponent implements Component {
 		const sessionName = this.ctx.sessionManager.getSessionName();
 		if (sessionName) pwd = `${pwd} • ${sessionName}`;
 
-		const parts: string[] = [];
 		const totals = stats.totals;
-		if (totals.input) parts.push(`↑${formatTokens(totals.input)}`);
-		if (totals.output) parts.push(`↓${formatTokens(totals.output)}`);
-		if (totals.cacheRead) parts.push(`R${formatTokens(totals.cacheRead)}`);
-		if (totals.cacheWrite) parts.push(`W${formatTokens(totals.cacheWrite)}`);
-		if ((totals.cacheRead > 0 || totals.cacheWrite > 0) && stats.cacheHitRate !== undefined) {
-			parts.push(`CH${stats.cacheHitRate.toFixed(1)}%`);
-		}
 		// Kimi Coding is subscription-backed despite using API-key authentication.
 		const usingSubscription = model?.provider === "kimi-coding";
-		if (totals.cost || usingSubscription) {
-			parts.push(`$${totals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`);
-		}
+		// The cost is the only segment before the readout.
+		const leadText =
+			totals.cost || usingSubscription
+				? `$${totals.cost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`
+				: "";
 		const autoIndicator = this.autoCompactEnabled() ? " (auto)" : "";
 		const contextDisplay = stats.contextKnown
 			? `${stats.contextPercent.toFixed(1)}%/${formatTokens(stats.contextWindow)}${autoIndicator}`
 			: `?/${formatTokens(stats.contextWindow)}${autoIndicator}`;
-		parts.push(
-			stats.contextPercent > 90
-				? theme.fg("error", contextDisplay)
-				: stats.contextPercent > 70
-					? theme.fg("warning", contextDisplay)
-					: contextDisplay,
-		);
+		const contextColor =
+			stats.contextPercent > 90 ? "error" : stats.contextPercent > 70 ? "warning" : "dim";
+		// The bar's filled cells follow the same thresholds, but a healthy
+		// usage is accent (purple) rather than the dim text colour.
+		const barColor =
+			stats.contextPercent > 90 ? "error" : stats.contextPercent > 70 ? "warning" : "accent";
 
-		let statsLeft = parts.join(" ");
+		// The left half without a bar: the cost is plain text, the readout
+		// carries its own colour when it is over a threshold, and the whole
+		// half is dimmed in one wrapper.
+		const readout = contextColor === "dim" ? contextDisplay : theme.fg(contextColor, contextDisplay);
+		let statsLeft = leadText ? `${leadText} ${readout}` : readout;
 		let statsLeftWidth = visibleWidth(statsLeft);
 		if (statsLeftWidth > width) {
 			statsLeft = truncateToWidth(statsLeft, width, "...");
@@ -192,6 +258,9 @@ class FooterComponent implements Component {
 		}
 
 		const modelName = model?.id || "no-model";
+		// The model on the right. The provider prefix only fits when there is
+		// room, and the room is measured on the left half *without* the bar:
+		// the right half never changes because of the bar.
 		let rightSide = modelName;
 		if (model?.reasoning) {
 			const level = this.ctx.thinkingLevel || "off";
@@ -203,26 +272,49 @@ class FooterComponent implements Component {
 				rightSide = withProvider;
 			}
 		}
-
 		const rightSideWidth = visibleWidth(rightSide);
-		let statsLine: string;
-		if (statsLeftWidth + MIN_PADDING + rightSideWidth <= width) {
-			statsLine = statsLeft + " ".repeat(width - statsLeftWidth - rightSideWidth) + rightSide;
+
+		// The bar is the only thing that shrinks: it tries the widest size
+		// first and falls back to narrower ones, and it is dropped entirely
+		// rather than pushing the numbers, the cost or the model out.
+		let leftText = statsLeft;
+		let leftPainted = statsLeft;
+		const barPercent = stats.contextPercentRaw;
+		if (barPercent !== null && stats.contextWindow > 0) {
+			for (const barWidth of BAR_WIDTHS) {
+				const bar = contextBar(theme, barPercent, barWidth, barColor);
+				if (!bar) break;
+				const candidateText = leadText
+					? `${leadText} ${bar.text} ${contextDisplay}`
+					: `${bar.text} ${contextDisplay}`;
+				const candidateWidth = visibleWidth(candidateText);
+				if (candidateWidth + MIN_PADDING + rightSideWidth <= width) {
+					leftText = candidateText;
+					leftPainted = leadText
+						? `${leadText} ${bar.painted} ${theme.fg(contextColor, contextDisplay)}`
+						: `${bar.painted} ${theme.fg(contextColor, contextDisplay)}`;
+					break;
+				}
+			}
+		}
+		const leftWidth = visibleWidth(leftText);
+
+		let rightText = "";
+		if (leftWidth + MIN_PADDING + rightSideWidth <= width) {
+			rightText = " ".repeat(width - leftWidth - rightSideWidth) + rightSide;
 		} else {
-			const available = width - statsLeftWidth - MIN_PADDING;
+			const available = width - leftWidth - MIN_PADDING;
 			if (available > 0) {
 				const truncated = truncateToWidth(rightSide, available, "");
-				statsLine = statsLeft + " ".repeat(Math.max(0, width - statsLeftWidth - visibleWidth(truncated))) + truncated;
-			} else {
-				statsLine = statsLeft;
+				rightText = " ".repeat(Math.max(0, width - leftWidth - visibleWidth(truncated))) + truncated;
 			}
 		}
 
-		// Dim each part separately: statsLeft may carry its own colour codes
-		// that would clear an outer dim wrapper.
+		// The left half is dimmed in one wrapper, the right half in another:
+		// a single wrapper would be cancelled by the bar's own colour codes.
 		const lines = [
 			truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "...")),
-			theme.fg("dim", statsLeft) + theme.fg("dim", statsLine.slice(statsLeft.length)),
+			theme.fg("dim", leftPainted) + theme.fg("dim", rightText),
 		];
 
 		const statusLine = this.renderStatusLine(width);

@@ -12,8 +12,8 @@ Claude Code runs this on every update and pipes the session JSON to stdin
 (https://code.claude.com/docs/en/statusline). The output is three lines:
 
   ~/Dotfiles (main) • my-session
-  CH91.0% $0.012 8.0%/200k                           claude-sonnet-5-5 • xhigh
-  ● kosmos.orchestrator — lead mode
+  $0.012 █░░░░░░░░░░░ 8.0%/200k                      claude-sonnet-5-5 • xhigh
+  ● kosmos-orchestrator
 
 Preview without launching Claude Code:
 
@@ -24,6 +24,7 @@ Colours are the Pi theme's palette (claude/themes/kosmos.json). NO_COLOR turns
 them off.
 """
 import json
+import math
 import os
 import re
 import shutil
@@ -33,6 +34,7 @@ from pathlib import Path
 
 ACCENT = (168, 85, 247)  # purple: the persona dot
 DIM = (216, 180, 254)  # purplePastel: the footer's "dim"
+MUTED = (161, 161, 170)  # gray: the bar's empty cells
 WARNING = (250, 204, 21)
 ERROR = (248, 113, 113)
 
@@ -41,6 +43,15 @@ ERROR = (248, 113, 113)
 MARGIN = 4
 MIN_PADDING = 2
 FALLBACK_PERSONA = "Claude Code"
+
+# Context usage bar: cell characters, default width and the degradation ladder.
+BAR_FILLED = "█"
+BAR_EMPTY = "░"
+BAR_WIDTHS = (12, 8, 6, 4)
+
+# A percentage above 100 % is possible (the estimate can exceed the window),
+# so the ceiling is generous; beyond it the number is not a percentage.
+MAX_CONTEXT_PERCENT = 1000
 
 ANSI = re.compile(r"\033\[[0-9;]*m")
 
@@ -53,6 +64,71 @@ def paint(rgb, text):
 
 def visible_width(text):
     return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in ANSI.sub("", text))
+
+
+def finite_number(value):
+    """The value as a finite float, or None when it is not a finite number.
+
+    A bool is an int subclass, so it is rejected on purpose; strings, None,
+    NaN and both infinities are rejected as well. A huge integer is
+    converted defensively: float() and math.isfinite() raise on it.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def usable_percent(value):
+    """The context percentage, or None when it is not a usable percentage.
+
+    A percentage has to be a finite number within 0..MAX_CONTEXT_PERCENT: an
+    over-100 % estimate is possible, but a magnitude such as 1e300 is not a
+    percentage at all. The readout, the thresholds and the bar all follow
+    this one value, so they can never disagree.
+    """
+    number = finite_number(value)
+    if number is None or not 0 <= number <= MAX_CONTEXT_PERCENT:
+        return None
+    return number
+
+
+def context_bar(percent, width, color):
+    """The context usage bar: filled cells in `color`, empty ones muted.
+
+    The filled count is the percentage of the bar, rounded half up like
+    JavaScript's Math.round, so both footers agree cell for cell. A small
+    but non-zero usage still shows one filled cell. The empty cells are
+    muted, not dim: dim is the brightest colour of the theme and would make
+    the unused part the loudest.
+    """
+    filled = int(percent / 100.0 * width + 0.5)
+    filled = max(0, min(width, filled))
+    if percent > 0 and filled == 0:
+        filled = 1
+    pieces = []
+    if filled > 0:
+        pieces.append((BAR_FILLED * filled, color))
+    if filled < width:
+        pieces.append((BAR_EMPTY * (width - filled), MUTED))
+    return pieces
+
+
+def items_plain(items):
+    """The plain text of the line-2 items, joined by a space."""
+    return " ".join("".join(text for text, _ in item) for item in items)
+
+
+def items_width(items):
+    return visible_width(items_plain(items))
+
+
+def paint_items(items):
+    """Paint every piece of every item; the items are joined by a space."""
+    return " ".join("".join(paint(color, text) for text, color in item) for item in items)
 
 
 def truncate(text, width, ellipsis="..."):
@@ -182,31 +258,58 @@ def render(data, width):
         pwd = "%s • %s" % (pwd, data["session_name"])
     line1 = paint(DIM, truncate(pwd, width))
 
-    # Line 2: cache, cost and context on the left; model and effort on the right.
-    stats = []
-    hit_ratio = (data.get("prompt_cache") or {}).get("hit_ratio")
-    if isinstance(hit_ratio, (int, float)):
-        stats.append("CH%.1f%%" % (hit_ratio * 100))
-    cost = (data.get("cost") or {}).get("total_cost_usd")
+    # Line 2: cost, the context bar and the context readout on the left;
+    # model and effort on the right.
+    segments = []
+    # The cost is validated: a string or a huge integer would raise and take
+    # the whole status line down with it. A zero cost shows no segment, as
+    # it always has.
+    cost = finite_number((data.get("cost") or {}).get("total_cost_usd"))
     if cost:
-        stats.append("$%.3f" % cost)
+        segments.append([("$%.3f" % cost, DIM)])
     window = data.get("context_window") or {}
-    percent = window.get("used_percentage")
+    # The percentage is validated once, up front: the readout, the
+    # thresholds and the bar all use this one value, so they can never
+    # disagree. A percentage that is not usable is treated like a missing
+    # one: the readout says so and no bar is drawn.
+    percent = usable_percent(window.get("used_percentage"))
     size = format_tokens(window.get("context_window_size") or 0)
-    context = ("%.1f%%/%s" % (percent, size)) if isinstance(percent, (int, float)) else "?/%s" % size
-    stats.append(context)
-
-    left_plain = truncate(" ".join(stats), width)
-    context_color = ERROR if (percent or 0) > 90 else WARNING if (percent or 0) > 70 else DIM
-    if left_plain.endswith(context) and context_color is not DIM:
-        head = left_plain[: len(left_plain) - len(context)]
-        left = paint(DIM, head) + paint(context_color, context)
-    else:
-        left = paint(DIM, left_plain)
+    context = ("%.1f%%/%s" % (percent, size)) if percent is not None else "?/%s" % size
+    usage = percent if percent is not None else 0
+    context_color = ERROR if usage > 90 else WARNING if usage > 70 else DIM
+    # The bar's filled cells follow the same thresholds, but a healthy usage
+    # is accent (purple) rather than the dim text colour.
+    bar_color = ERROR if usage > 90 else WARNING if usage > 70 else ACCENT
 
     model = (data.get("model") or {}).get("id") or "no-model"
     effort = (data.get("effort") or {}).get("level")
     right_plain = "%s • %s" % (model, effort) if effort else model
+
+    def build_left(bar_width):
+        items = list(segments)
+        if bar_width:
+            items.append(context_bar(percent, bar_width, bar_color))
+        items.append([(context, context_color)])
+        return items
+
+    # The bar is the only thing that shrinks: it tries the widest size first
+    # and falls back to narrower ones, and it is dropped entirely rather than
+    # pushing the numbers, the cost or the model out.
+    left_items = build_left(None)
+    if percent is not None and (window.get("context_window_size") or 0) > 0:
+        for bar_width in BAR_WIDTHS:
+            candidate = build_left(bar_width)
+            if items_width(candidate) + MIN_PADDING + visible_width(right_plain) <= width:
+                left_items = candidate
+                break
+
+    left_plain = items_plain(left_items)
+    if visible_width(left_plain) > width:
+        # Too narrow for the whole left half: cut it with an ellipsis and
+        # paint it dim, like the previous version did.
+        left_plain = truncate(left_plain, width)
+        left_items = [[(left_plain, DIM)]]
+    left = paint_items(left_items)
     left_width = visible_width(left_plain)
     if left_width + MIN_PADDING + visible_width(right_plain) <= width:
         line2 = left + " " * (width - left_width - visible_width(right_plain)) + paint(DIM, right_plain)

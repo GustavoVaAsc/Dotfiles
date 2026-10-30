@@ -366,7 +366,7 @@ if $DRY_RUN; then
 else
 	echo "Done. The kosmos agent system is configured in $CLAUDE_DIR."
 	echo "Start a new Claude Code session: the header reads @kosmos-orchestrator and the"
-	echo "status line shows '● kosmos.orchestrator — lead mode'. The kosmos-* specialists"
+	echo "status line shows '● kosmos-orchestrator'. The kosmos-* specialists"
 	echo "are in $CLAUDE_DIR/agents/; /pr-workflow and /the-cock-of-justice are available."
 fi
 if [ "$MCP_FAILED" -gt 0 ]; then

@@ -80,8 +80,8 @@ Two subtrees in the Dotfiles repo are kept in sync with the live Pi config:
   - `settings.json` — user preferences, theme, default model, packages list
   - `themes/kosmos.json` — custom theme
   - `mcp-adapter.json` — MCP adapter settings (footer icon, tool rendering); the server list lives in the shared config below
-  - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it alongside the active model in the TUI footer and terminal title
-  - `extensions/footer.ts` — replaces Pi's built-in footer with the same layout, but puts the MCP status hint on the bottom right instead of trailing the other extension statuses on the left
+  - `extensions/agent-name-hint.ts` — derives the active persona label from the system prompt's first heading and displays it in the TUI footer status line and, with the active model, in the terminal title
+  - `extensions/footer.ts` — replaces Pi's built-in footer with the same layout, but puts the MCP status hint on the bottom right instead of trailing the other extension statuses on the left, shows a context usage bar before the context readout, and leaves the token counters (input, output, cache reads and writes) and the cache hit rate out. The bar is 12 cells wide and shrinks (12, 8, 6, 4) when the line does not fit. It is omitted when the percentage is unusable (not a finite number, or outside 0–1000 %; the readout then shows `?/<size>`) and when the context window size is zero or unknown. A session that has not reported a percentage yet — a fresh session — renders `0.0%/<size>` and no bar until the first response reports one, because nothing has been used at that point
 - `mcp/` — global MCP config, symlinked to `~/.config/mcp/`:
   - `mcp.json` — globally available MCP servers, the single source of truth for the server list
 

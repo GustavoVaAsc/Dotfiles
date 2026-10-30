@@ -18,7 +18,7 @@
  *   4. Otherwise fall back to "Pi Coding Agent".
  *
  * For a stable label, give your SYSTEM.md / APPEND_SYSTEM.md a first heading like:
- *   `# kosmos.orchestrator — lead mode`
+ *   `# kosmos-orchestrator`
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

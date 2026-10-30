@@ -36,7 +36,7 @@ mod.default({
 
 const theme = { fg: (_style, text) => text };
 const statuses = new Map([
-	["agent-name", "● kosmos.orchestrator — lead mode · minimax/MiniMax-M3.1-Flash"],
+	["agent-name", "● kosmos-orchestrator"],
 	["mcp", "MCP: 1 server enabled (1 connected)"],
 ]);
 const footerData = {
@@ -50,6 +50,8 @@ const entries = [
 		type: "message",
 		message: {
 			role: "assistant",
+			// Only the cost is rendered; the token fields are kept to mirror
+			// the shape of a real session entry.
 			usage: { input: 1200, output: 800, cacheRead: 40000, cacheWrite: 0, cost: { total: 0.012 } },
 		},
 	},
