@@ -33,6 +33,7 @@ return {
                 ["<CR>"] = cmp.mapping.confirm({ select = true }), -- Enter to confirm
             }),
             sources = cmp.config.sources({
+                { name = "lazydev", group_index = 0 }, -- Neovim Lua API (lua only)
                 { name = "nvim_lsp" }, -- Prioritize LSP
                 { name = "luasnip" },  -- Then snippets
                 { name = "path" },     -- Then paths
