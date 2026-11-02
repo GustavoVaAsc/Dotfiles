@@ -1,18 +1,26 @@
 /**
  * usage.ts
  *
- * Adds the `/usage` command: a compact report of the token-plan quota of
- * the two subscription providers this machine is set up for.
+ * Adds the `/usage` command: the token-plan quota of the two subscription
+ * providers this machine is set up for, shown the way Claude Code shows its
+ * `/usage`.
  *
  * - MiniMax Token Plan: the 5-hour rolling window and the weekly window,
- *   with the remaining percentage and the reset time, read from the
- *   `token_plan/remains` endpoint with the provider API key.
+ *   read from the `token_plan/remains` endpoint with the provider API key.
  * - Xiaomi MiMo Token Plan: the plan's usage and allowance, read from the
  *   Xiaomi dashboard API with the browser session cookie.
  *
- * The report is a custom message, not a user message, so it never starts a
- * model turn: the numbers are rendered into the transcript and the session
- * stays idle.
+ * In the TUI the report is an overlay panel, not a chat message. The panel
+ * opens at once with a loading state and fills in when the fetch settles;
+ * Esc or q closes it, `r` fetches again past the cache. Nothing is written
+ * to the transcript and no model turn is started. Every quota window is a
+ * row of its own: a label, a fill bar of the fraction used (same glyphs,
+ * colours and thresholds as the context bar of footer.ts, sized to the
+ * panel width), the used and remaining amounts, and the reset time. A
+ * percentage the API did not give is shown as `?` with an empty bar.
+ *
+ * Without a TUI (print, json and RPC modes) the same report is sent as a
+ * custom message, so those modes still get it.
  *
  * No secret is ever printed. The MiniMax key and the Xiaomi cookie are
  * only ever used as request credentials; the report carries percentages,
@@ -24,9 +32,21 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { Component } from "@earendil-works/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 /** The custom message type the report is delivered as. */
 const REPORT_TYPE = "usage-report";
+
+/** Fill bar glyphs, the same as the context bar of footer.ts. */
+const BAR_FILLED = "█";
+const BAR_EMPTY = "░";
+
+/** The bar never grows past this many cells, however wide the panel is. */
+const BAR_MAX_WIDTH = 40;
+
+/** The bar never shrinks below this many cells. */
+const BAR_MIN_WIDTH = 4;
 
 /** The MiniMax token-plan endpoint. */
 const MINIMAX_REMAINS_URL = "https://api.minimax.io/v1/token_plan/remains";
@@ -158,29 +178,64 @@ function formatReset(epochMs: unknown): string | undefined {
 	return `${date} ${time}`;
 }
 
-/** A percentage as a whole number, or undefined when there is none. */
-function formatPercent(value: number | undefined): string | undefined {
-	if (value === undefined) return undefined;
-	return `${Math.round(value)}%`;
-}
-
 /** A count as a plain integer. */
 function formatCount(value: number): string {
 	return Math.round(value).toLocaleString("en-US");
 }
 
 /**
- * The "used of total" part of a MiniMax line.
+ * The absolute amounts of a MiniMax window, or undefined when there are none.
  *
  * The counts are only shown when they are non-zero: with this account the
  * endpoint answers with zero counts and meaningful percentages, and a
- * "0 used" line would state as fact something the API does not know.
+ * "0 used" line would state as fact something the API does not know. The
+ * remaining count is only derived when both the used and the total count
+ * are known.
  */
-function formatCounts(used: number | undefined, total: number | undefined): string {
-	if (used !== undefined && total !== undefined) return ` · ${formatCount(used)}/${formatCount(total)} used`;
-	if (total !== undefined) return ` · limit ${formatCount(total)}`;
-	if (used !== undefined) return ` · ${formatCount(used)} used`;
-	return "";
+function formatCounts(used: number | undefined, total: number | undefined): string | undefined {
+	if (used !== undefined && total !== undefined) {
+		const left = Math.max(0, total - used);
+		return `${formatCount(used)} of ${formatCount(total)} used · ${formatCount(left)} left`;
+	}
+	if (total !== undefined) return `limit ${formatCount(total)}`;
+	if (used !== undefined) return `${formatCount(used)} used`;
+	return undefined;
+}
+
+/**
+ * One quota window of the report.
+ *
+ * `used` is the fraction used in percent, or undefined when the API gave
+ * none: the bar is then empty and the numbers read `?`.
+ */
+type QuotaRow = {
+	label: string;
+	used?: number;
+	/** The used and remaining amounts in absolute terms, when known. */
+	amounts?: string;
+	reset?: string;
+};
+
+/** A provider block of the report: a title and its rows or a note. */
+type Section = {
+	title: string;
+	rows: QuotaRow[];
+	/** A line that stands in for the rows: an error or a setup hint. */
+	note?: string[];
+};
+
+/** The whole report: one section per provider. */
+type Report = Section[];
+
+/** A provider-supplied name without control characters, so it cannot move the cursor or colour the panel. */
+function cleanName(name: string): string {
+	return name.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
+}
+
+/** The used percentage of a remaining percentage, clamped to 0..100. */
+function usedFromRemaining(remaining: number | undefined): number | undefined {
+	if (remaining === undefined) return undefined;
+	return Math.max(0, Math.min(100, 100 - remaining));
 }
 
 /**
@@ -189,10 +244,11 @@ function formatCounts(used: number | undefined, total: number | undefined): stri
  * The `general` row is the plan of the account; a response without it
  * falls back to the first row, which is the only one there is.
  */
-async function renderMiniMax(auth: AuthFile): Promise<string[]> {
+async function fetchMiniMax(auth: AuthFile): Promise<Section> {
+	const title = "MiniMax Token Plan";
 	const key = apiKey(auth, "minimax");
 	if (!key) {
-		return ["MiniMax Token Plan", "  no API key for minimax in ~/.pi/agent/auth.json"];
+		return { title, rows: [], note: ["no API key for minimax in ~/.pi/agent/auth.json"] };
 	}
 
 	let response: Response;
@@ -203,57 +259,64 @@ async function renderMiniMax(auth: AuthFile): Promise<string[]> {
 		});
 	} catch (error) {
 		const reason = error instanceof Error && error.name === "TimeoutError" ? "timed out" : "request failed";
-		return ["MiniMax Token Plan", `  unavailable (${reason})`];
+		return { title, rows: [], note: [`unavailable (${reason})`] };
 	}
 
 	if (!response.ok) {
-		return ["MiniMax Token Plan", `  unavailable (HTTP ${response.status})`];
+		return { title, rows: [], note: [`unavailable (HTTP ${response.status})`] };
 	}
 
 	let body: MinimaxResponse;
 	try {
 		body = (await response.json()) as MinimaxResponse;
 	} catch {
-		return ["MiniMax Token Plan", "  unavailable (unreadable response)"];
+		return { title, rows: [], note: ["unavailable (unreadable response)"] };
 	}
 
+	return minimaxSection(body);
+}
+
+/** The MiniMax section of a parsed remains response. */
+export function minimaxSection(body: MinimaxResponse): Section {
 	const rows = Array.isArray(body?.model_remains) ? body.model_remains : [];
-	if (rows.length === 0) return ["MiniMax Token Plan", "  no plan information in the response"];
+	if (rows.length === 0) return { title: "MiniMax Token Plan", rows: [], note: ["no plan information in the response"] };
 
 	const row = rows.find((entry) => entry?.model_name === "general") ?? rows[0];
-	const model = typeof row.model_name === "string" && row.model_name ? row.model_name : "general";
+	const model = (typeof row.model_name === "string" && cleanName(row.model_name)) || "general";
 
-	const lines = [`MiniMax Token Plan (${model})`];
-
-	const interval = formatPercent(usablePercent(row.current_interval_remaining_percent));
-	const intervalReset = formatReset(row.end_time);
-	if (interval === undefined && intervalReset === undefined) {
-		lines.push("  5h window   no information");
-	} else {
-		lines.push(
-			`  5h window   ${interval ?? "?"} remaining${intervalReset ? ` · resets ${intervalReset}` : ""}` +
-				formatCounts(
-					usableCount(row.current_interval_usage_count),
-					usableCount(row.current_interval_total_count),
-				),
-		);
+	const windows: QuotaRow[] = [];
+	const pairs = [
+		{
+			label: "5h window",
+			remaining: row.current_interval_remaining_percent,
+			reset: row.end_time,
+			used: row.current_interval_usage_count,
+			total: row.current_interval_total_count,
+		},
+		{
+			label: "Weekly",
+			remaining: row.current_weekly_remaining_percent,
+			reset: row.weekly_end_time,
+			used: row.current_weekly_usage_count,
+			total: row.current_weekly_total_count,
+		},
+	];
+	for (const pair of pairs) {
+		const remaining = usablePercent(pair.remaining);
+		const reset = formatReset(pair.reset);
+		if (remaining === undefined && reset === undefined) {
+			windows.push({ label: pair.label });
+			continue;
+		}
+		windows.push({
+			label: pair.label,
+			used: usedFromRemaining(remaining),
+			amounts: formatCounts(usableCount(pair.used), usableCount(pair.total)),
+			reset,
+		});
 	}
 
-	const weekly = formatPercent(usablePercent(row.current_weekly_remaining_percent));
-	const weeklyReset = formatReset(row.weekly_end_time);
-	if (weekly === undefined && weeklyReset === undefined) {
-		lines.push("  weekly      no information");
-	} else {
-		lines.push(
-			`  weekly      ${weekly ?? "?"} remaining${weeklyReset ? ` · resets ${weeklyReset}` : ""}` +
-				formatCounts(
-					usableCount(row.current_weekly_usage_count),
-					usableCount(row.current_weekly_total_count),
-				),
-		);
-	}
-
-	return lines;
+	return { title: `MiniMax Token Plan (${model})`, rows: windows };
 }
 
 /**
@@ -371,6 +434,7 @@ function pickHeadlineItem(items: UsageItem[]): UsageItem | undefined {
 
 /** The percentage of an item that is used, when the limit allows it. */
 function usedPercent(item: UsageItem): number | undefined {
+	if (!Number.isFinite(item.used) || item.used < 0) return undefined;
 	if (!Number.isFinite(item.limit) || item.limit <= 0) return undefined;
 	const percent = (item.used / item.limit) * 100;
 	if (!Number.isFinite(percent)) return undefined;
@@ -440,47 +504,62 @@ async function fetchMimo(url: string, cookie: string): Promise<MimoResponse> {
 }
 
 /**
+ * The used and remaining amounts of a Xiaomi item, or undefined when there
+ * is nothing worth showing. A negative or non-finite `used` is unknown, and
+ * a limit that is not positive is no allowance: only the used amount shows.
+ */
+function mimoAmounts(item: UsageItem): string | undefined {
+	if (!Number.isFinite(item.used) || item.used < 0) return undefined;
+	const hasLimit = Number.isFinite(item.limit) && item.limit > 0;
+	if (!hasLimit) {
+		return item.used > 0 ? `${formatCredits(item.used, item.used >= MIMO_CREDIT_SCALE)} used` : undefined;
+	}
+	const scaled = item.limit >= MIMO_CREDIT_SCALE;
+	const left = Math.max(0, item.limit - item.used);
+	return `${formatCredits(item.used, scaled)} of ${formatCredits(item.limit, scaled)} used · ${formatCredits(left, scaled)} left`;
+}
+
+/** A quota row of a Xiaomi item. */
+export function mimoRow(label: string, item: UsageItem): QuotaRow {
+	return { label: cleanName(label) || "model", used: usedPercent(item), amounts: mimoAmounts(item) };
+}
+
+/**
  * The Xiaomi block of the report.
  *
  * Without a cookie the block explains how to configure one; with a cookie
  * it reports the usage of the plan, and the per-model breakdown when the
  * dashboard has one to add.
  */
-async function renderMimo(): Promise<string[]> {
-	const lines = ["Xiaomi MiMo Token Plan"];
+async function fetchMimoSection(): Promise<Section> {
+	const title = "Xiaomi MiMo Token Plan";
 	const cookie = await readMimoCookie();
 	if (!cookie) {
-		lines.push(
-			`  cookie not configured — sign in at ${MIMO_LOGIN_URL} and save`,
-			"  the api-platform_serviceToken cookie in ~/.config/mimo/token-plan-cookie",
-		);
-		return lines;
+		return {
+			title,
+			rows: [],
+			note: [
+				`cookie not configured — sign in at ${MIMO_LOGIN_URL} and save`,
+				"the api-platform_serviceToken cookie in ~/.config/mimo/token-plan-cookie",
+			],
+		};
 	}
 
 	const usage = await fetchMimo(MIMO_USAGE_URL, cookie);
 	if (usage.status === 401) {
-		lines.push("  the cookie expired, refresh it from the dashboard");
-		return lines;
+		return { title, rows: [], note: ["the cookie expired, refresh it from the dashboard"] };
 	}
 	if (usage.status !== 200) {
-		const reason = usage.error ?? `HTTP ${usage.status}`;
-		lines.push(`  unavailable (${reason})`);
-		return lines;
+		return { title, rows: [], note: [`unavailable (${usage.error ?? `HTTP ${usage.status}`})`] };
 	}
 
 	const items = collectUsageItems(usage.body);
 	const headline = pickHeadlineItem(items);
 	if (!headline) {
-		lines.push(`  unexpected response (keys: ${topLevelKeys(usage.body)})`);
-		return lines;
+		return { title, rows: [], note: [`unexpected response (keys: ${topLevelKeys(usage.body)})`] };
 	}
 
-	const percent = usedPercent(headline);
-	const scaled = headline.limit >= MIMO_CREDIT_SCALE;
-	lines.push(
-		`  month total   ${percent === undefined ? "?" : `${Math.round(percent)}% used`} · ` +
-			`${formatCredits(headline.used, scaled)} of ${formatCredits(headline.limit, scaled)}`,
-	);
+	const rows = [mimoRow("Month total", headline)];
 
 	// The detail endpoint is only worth a call when the usage call worked
 	// and its answer was understood; it adds the per-model breakdown. An
@@ -490,17 +569,189 @@ async function renderMimo(): Promise<string[]> {
 		const detailItems = collectUsageItems(detail.body).filter(
 			(item) => item.name && !(item.limit === headline.limit && item.used === headline.used),
 		);
-		for (const item of detailItems.slice(0, 2)) {
-			const itemPercent = usedPercent(item);
-			const itemScaled = item.limit >= MIMO_CREDIT_SCALE;
-			lines.push(
-				`  ${item.name}   ${itemPercent === undefined ? "?" : `${Math.round(itemPercent)}% used`} · ` +
-					`${formatCredits(item.used, itemScaled)} of ${formatCredits(item.limit, itemScaled)}`,
-			);
-		}
+		for (const item of detailItems.slice(0, 2)) rows.push(mimoRow(item.name as string, item));
 	}
 
+	return { title, rows };
+}
+
+/** The colours of the panel; Pi's Theme satisfies it, and so does a plain stub. */
+export type PanelTheme = {
+	fg(style: string, text: string): string;
+	bold(text: string): string;
+};
+
+/** The colour of the filled cells: the thresholds of the context bar in footer.ts. */
+function barColor(percent: number): string {
+	return percent > 90 ? "error" : percent > 70 ? "warning" : "accent";
+}
+
+/**
+ * The whole-number percentage used that is displayed. It is only 0 when
+ * nothing is used and only 100 when the quota is exhausted, so "0% left"
+ * and "0% used" never round their way into the readout.
+ */
+function displayUsed(percent: number): number {
+	if (percent <= 0) return 0;
+	if (percent >= 100) return 100;
+	return Math.min(99, Math.max(1, Math.round(percent)));
+}
+
+/**
+ * The fill bar: `width` cells, filled proportionally to the fraction used.
+ * A small but non-zero usage still shows one filled cell and a bar is only
+ * full when the quota is exhausted. An unknown fraction gives an all-empty
+ * bar, never a full or a zero-filled one.
+ */
+function fillBar(theme: PanelTheme, percent: number | undefined, width: number): string {
+	if (percent === undefined || !Number.isFinite(percent)) return theme.fg("muted", BAR_EMPTY.repeat(width));
+	const shown = displayUsed(percent);
+	let filled = Math.round((shown / 100) * width);
+	if (shown < 100) filled = Math.min(filled, width - 1);
+	if (shown > 0) filled = Math.max(filled, 1);
+	let painted = "";
+	if (filled > 0) painted += theme.fg(barColor(percent), BAR_FILLED.repeat(filled));
+	if (filled < width) painted += theme.fg("muted", BAR_EMPTY.repeat(width - filled));
+	return painted;
+}
+
+/** The "N% used · M% left" readout of a row; `?` when the percentage is unknown. */
+function percentText(percent: number | undefined): string {
+	if (percent === undefined || !Number.isFinite(percent)) return "? used · ? left";
+	const used = displayUsed(percent);
+	return `${used}% used · ${100 - used}% left`;
+}
+
+/**
+ * How the body is laid out:
+ * - `full`: label, bar and readout, amounts and reset on lines of their own.
+ * - `compact`: for short terminals, no blank separators, one line per row
+ *   (label, bar, readout, reset) and the amounts as a dim second line, kept
+ *   only when they fit whole. When the reset does not fit beside a bar of at least 8 cells it moves
+ *   to the second line, so it is never clipped.
+ * - `tight`: like `compact` without the amounts line, and the bar may
+ *   shrink to 4 cells. The amounts are the only thing ever dropped.
+ */
+export type BodyMode = "full" | "compact" | "tight";
+
+/** A unit of the body that is kept or dropped as a whole when the body is clipped. */
+type Block = { lines: string[]; title?: boolean };
+
+/** Month abbreviations for the short reset form. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-11-08 18:00" as "Nov 08 18:00"; a time of day stays as it is. */
+function shortReset(reset: string): string {
+	const match = reset.match(/^\d{4}-(\d{2})-(\d{2}) (.+)$/);
+	if (!match) return reset;
+	return `${MONTHS[Number(match[1]) - 1] ?? match[1]} ${match[2]} ${match[3]}`;
+}
+
+/** The body as blocks; the blank before a section belongs to its title block, the blank before a row to the row. */
+function bodyBlocks(report: Report, theme: PanelTheme, width: number, mode: BodyMode): Block[] {
+	const full = mode === "full";
+	const blocks: Block[] = [];
+	const fit = (line: string) => truncateToWidth(line, width, theme.fg("dim", "…"));
+
+	// One bar width for every row, so the bars line up.
+	const rows = report.flatMap((section) => section.rows);
+	const readout = Math.max(0, ...rows.map((row) => visibleWidth(percentText(row.used))));
+	let barWidth = Math.max(BAR_MIN_WIDTH, Math.min(BAR_MAX_WIDTH, width - 2 - readout - 2));
+	let resetInline = false;
+	let labelWidth = 0;
+	if (!full) {
+		labelWidth = Math.max(0, ...rows.map((row) => visibleWidth(row.label)));
+		const resetWidth = Math.max(0, ...rows.map((row) => (row.reset ? 3 + visibleWidth(shortReset(row.reset)) : 0)));
+		const space = width - 2 - labelWidth - 2 - 2 - readout - resetWidth;
+		const minBar = mode === "compact" ? 8 : BAR_MIN_WIDTH;
+		resetInline = space >= minBar;
+		const room = resetInline ? space : width - 2 - labelWidth - 2 - 2 - readout;
+		barWidth = Math.max(BAR_MIN_WIDTH, Math.min(20, room));
+	}
+
+	report.forEach((section, index) => {
+		const head: string[] = [];
+		if (index > 0 && full) head.push("");
+		head.push(fit(theme.bold(theme.fg("accent", section.title))));
+		for (const note of section.note ?? []) head.push(fit(`  ${theme.fg("warning", note)}`));
+		blocks.push({ lines: head, title: section.rows.length > 0 });
+		for (const row of section.rows) {
+			const lines: string[] = [];
+			if (full) lines.push("");
+			const empty = row.used === undefined && row.amounts === undefined && row.reset === undefined;
+			if (!full) {
+				const label = row.label + " ".repeat(Math.max(0, labelWidth - visibleWidth(row.label)));
+				if (empty) {
+					lines.push(fit(`  ${label}  ${theme.fg("dim", "no information")}`));
+				} else {
+					const reset = row.reset && resetInline ? theme.fg("dim", ` · ${shortReset(row.reset)}`) : "";
+					lines.push(fit(`  ${label}  ${fillBar(theme, row.used, barWidth)}  ${percentText(row.used)}${reset}`));
+					const second: string[] = [];
+					if (row.reset && !resetInline) second.push(`resets ${shortReset(row.reset)}`);
+					// The amounts are dropped when they do not fit whole beside the reset.
+					const indent = 2 + labelWidth + 2;
+					if (row.amounts && mode === "compact") {
+						const joined = [...second, row.amounts].join(" · ");
+						if (indent + visibleWidth(joined) <= width) second.push(row.amounts);
+					}
+					if (second.length > 0) lines.push(fit(`  ${" ".repeat(labelWidth + 2)}${theme.fg("dim", second.join(" · "))}`));
+				}
+			} else {
+				lines.push(fit(`  ${row.label}`));
+				if (empty) {
+					lines.push(fit(`  ${theme.fg("dim", "no information")}`));
+				} else {
+					lines.push(fit(`  ${fillBar(theme, row.used, barWidth)}  ${percentText(row.used)}`));
+					if (row.amounts) lines.push(fit(`  ${theme.fg("dim", row.amounts)}`));
+					if (row.reset) lines.push(fit(`  ${theme.fg("dim", `Resets ${row.reset}`)}`));
+				}
+			}
+			blocks.push({ lines });
+		}
+	});
+	return blocks;
+}
+
+/** The body of the report as lines of at most `width` columns. */
+export function renderReportBody(report: Report, theme: PanelTheme, width: number, mode: BodyMode = "full"): string[] {
+	return bodyBlocks(report, theme, width, mode).flatMap((block) => block.lines);
+}
+
+/**
+ * The body clipped to `room` lines. Whole blocks are kept, so a row is never
+ * cut in half and a provider title never ends the body without a row under
+ * it. The hidden remainder is counted in a dim `… N more lines`.
+ */
+export function clipReportBody(report: Report, theme: PanelTheme, width: number, room: number): string[] {
+	const blocks = bodyBlocks(report, theme, width, "tight");
+	const total = blocks.reduce((sum, block) => sum + block.lines.length, 0);
+	if (total <= room) return blocks.flatMap((block) => block.lines);
+
+	// Leave one line for the "more lines" marker.
+	const budget = Math.max(0, room - 1);
+	let used = 0;
+	let kept = 0;
+	for (const block of blocks) {
+		if (used + block.lines.length > budget) break;
+		used += block.lines.length;
+		kept++;
+	}
+	while (kept > 0 && blocks[kept - 1].title) {
+		kept--;
+		used -= blocks[kept].lines.length;
+	}
+	const hidden = total - used;
+	const lines = blocks.slice(0, kept).flatMap((block) => block.lines);
+	if (room > 0) lines.push(theme.fg("dim", `… ${hidden} more line${hidden === 1 ? "" : "s"}`));
 	return lines;
+}
+
+const HINT_LINE = "This session's split: /subagent-cost";
+
+/** The report as plain text, for the modes that have no panel. */
+export function reportToText(report: Report): string {
+	const plain: PanelTheme = { fg: (_style, text) => text, bold: (text) => text };
+	return ["Token plan usage", "", ...renderReportBody(report, plain, 64), "", HINT_LINE].join("\n");
 }
 
 /**
@@ -510,22 +761,29 @@ async function renderMimo(): Promise<string[]> {
  * its own, so a provider that is down or misconfigured never keeps the
  * other one from being reported.
  */
-export async function buildUsageReport(): Promise<string> {
-	// The two providers are fetched in parallel and each one settles on its
-	// own: a provider that is down or misconfigured never keeps the other
-	// one from being reported.
+export async function buildReport(): Promise<Report> {
 	const [minimaxResult, mimoResult] = await Promise.allSettled([
-		readAuth().then((auth) => renderMiniMax(auth)),
-		renderMimo(),
+		readAuth().then((auth) => fetchMiniMax(auth)),
+		fetchMimoSection(),
 	]);
-	const minimax = minimaxResult.status === "fulfilled" ? minimaxResult.value : ["MiniMax Token Plan", "  unavailable"];
-	const mimo = mimoResult.status === "fulfilled" ? mimoResult.value : ["Xiaomi MiMo Token Plan", "  unavailable"];
-	const lines = ["Token plan usage", "", ...minimax, "", ...mimo, "", "This session's split: /subagent-cost"];
-	return lines.join("\n");
+	const minimax: Section =
+		minimaxResult.status === "fulfilled"
+			? minimaxResult.value
+			: { title: "MiniMax Token Plan", rows: [], note: ["unavailable"] };
+	const mimo: Section =
+		mimoResult.status === "fulfilled"
+			? mimoResult.value
+			: { title: "Xiaomi MiMo Token Plan", rows: [], note: ["unavailable"] };
+	return [minimax, mimo];
 }
 
 /** The cached report and the moment it was fetched. */
-let cached: { at: number; text: string } | undefined;
+let cached: { at: number; report: Report } | undefined;
+
+/** The cached report when it is still fresh. */
+function freshCache(): Report | undefined {
+	return cached && Date.now() - cached.at < CACHE_TTL_MS ? cached.report : undefined;
+}
 
 /**
  * The report, from the cache when it is still fresh.
@@ -533,11 +791,126 @@ let cached: { at: number; text: string } | undefined;
  * `refresh` forces a new fetch; without it a second `/usage` inside the
  * same minute is answered from the cache and costs no request.
  */
-export async function usageReport(refresh: boolean): Promise<string> {
-	if (!refresh && cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.text;
-	const text = await buildUsageReport();
-	cached = { at: Date.now(), text };
-	return text;
+export async function usageReport(refresh: boolean): Promise<Report> {
+	const hit = refresh ? undefined : freshCache();
+	if (hit) return hit;
+	const report = await buildReport();
+	cached = { at: Date.now(), report };
+	return report;
+}
+
+/** What the panel needs from the TUI: a render hook and the terminal height. */
+type PanelHost = { requestRender(): void; terminal?: { rows: number } };
+
+/** The report shown when a load fails: both providers, unavailable. */
+function unavailableReport(): Report {
+	return [
+		{ title: "MiniMax Token Plan", rows: [], note: ["unavailable"] },
+		{ title: "Xiaomi MiMo Token Plan", rows: [], note: ["unavailable"] },
+	];
+}
+
+/** The overlay geometry; the panel's room math and `overlayOptions` use the same values. */
+const OVERLAY_WIDTH = 76;
+const OVERLAY_HEIGHT_SHARE = 0.9;
+const OVERLAY_MARGIN = 1;
+
+/**
+ * The overlay panel: a loading state first, the report once it settles.
+ * Esc or q closes it, `r` fetches again past the cache. While a fetch is
+ * running the current report stays on screen and `r` is ignored.
+ */
+export class UsagePanel implements Component {
+	private report: Report | undefined;
+	private closed = false;
+	private pending = false;
+
+	constructor(
+		private readonly host: PanelHost,
+		private readonly theme: PanelTheme,
+		private readonly close: () => void,
+		private readonly load: (refresh: boolean) => Promise<Report>,
+		initial?: Report,
+	) {
+		this.report = initial;
+		if (!initial) this.start(false);
+	}
+
+	/** Start a fetch; a result that arrives after the panel closed is dropped. */
+	private start(refresh: boolean): void {
+		this.pending = true;
+		const settle = (report: Report) => {
+			if (this.closed) return;
+			this.pending = false;
+			this.report = report;
+			this.host.requestRender();
+		};
+		this.load(refresh).then(settle, () => settle(unavailableReport()));
+	}
+
+	handleInput(data: string): void {
+		if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c") || matchesKey(data, "q")) {
+			this.close();
+		} else if (matchesKey(data, "r") && !this.pending) {
+			this.start(true);
+			this.host.requestRender();
+		}
+	}
+
+	dispose(): void {
+		this.closed = true;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		const theme = this.theme;
+		const inner = Math.max(1, width - 4);
+		// The close hint lives in the header, so a clipped bottom never hides
+		// it. At narrow widths the title goes first, then the refresh hint;
+		// a hint is shown whole or not at all.
+		const refreshing = this.pending && this.report ? "refreshing… · " : "";
+		const keysFull = this.pending ? `${refreshing}Esc/q close` : "Esc/q close · r refresh";
+		const headers = [
+			`${theme.bold("Token plan usage")}  ${theme.fg("dim", keysFull)}`,
+			theme.fg("dim", keysFull),
+			theme.fg("dim", `${refreshing}Esc/q close`),
+			theme.fg("dim", "Esc/q close"),
+		];
+		const header = headers.find((candidate) => visibleWidth(candidate) <= inner) ?? headers[headers.length - 1];
+		const hint = theme.fg("dim", HINT_LINE);
+
+		// Lines the overlay can show: Pi clamps its height to the share of the
+		// terminal and to the rows left by the margins; the borders are ours.
+		const rows = this.host.terminal?.rows;
+		const room =
+			rows === undefined
+				? Infinity
+				: Math.min(Math.floor(rows * OVERLAY_HEIGHT_SHARE), rows - 2 * OVERLAY_MARGIN) - 2;
+
+		let lines: string[];
+		if (!this.report) {
+			lines = [header, "", theme.fg("dim", "Loading token plan usage…"), "", hint];
+		} else {
+			lines = [header, "", ...renderReportBody(this.report, theme, inner), "", hint];
+			for (const mode of ["compact", "tight"] as const) {
+				if (lines.length <= room) break;
+				lines = [header, ...renderReportBody(this.report, theme, inner, mode), hint];
+			}
+			if (lines.length > room) {
+				lines = [header, ...clipReportBody(this.report, theme, inner, Math.max(0, room - 2)), hint];
+			}
+		}
+
+		const border = (text: string) => theme.fg("borderMuted", text);
+		const top = border(`╭${"─".repeat(Math.max(0, width - 2))}╮`);
+		const bottom = border(`╰${"─".repeat(Math.max(0, width - 2))}╯`);
+		const framed = lines.map((line) => {
+			const fitted = truncateToWidth(line, inner, "…", true);
+			return `${border("│")} ${fitted} ${border("│")}`;
+		});
+		return [top, ...framed, bottom];
+	}
 }
 
 export default function (pi: ExtensionAPI) {
@@ -545,10 +918,40 @@ export default function (pi: ExtensionAPI) {
 		description: "Show the token plan quota of MiniMax and Xiaomi MiMo",
 		handler: async (args, ctx) => {
 			const refresh = args.trim().toLowerCase() === "refresh";
-			const text = await usageReport(refresh);
-			// A custom message, not a user message: the report lands in the
-			// transcript and no model turn is started.
-			pi.sendMessage({ customType: REPORT_TYPE, content: text, display: true, details: { viewOnly: true } });
+
+			if (ctx.mode !== "tui") {
+				// No panel without a TUI: a custom message, not a user message,
+				// so the report reaches print and RPC modes and no model turn
+				// is started.
+				const text = reportToText(await usageReport(refresh));
+				pi.sendMessage({ customType: REPORT_TYPE, content: text, display: true, details: { viewOnly: true } });
+				return;
+			}
+
+			const initial = refresh ? undefined : freshCache();
+			let first = refresh;
+			await ctx.ui.custom<void>(
+				(tui, theme, _keybindings, done) =>
+					new UsagePanel(
+						tui,
+						theme,
+						() => done(),
+						(force) => {
+							// `/usage refresh` bypasses the cache on the first load too.
+							const bypass = force || first;
+							first = false;
+							return usageReport(bypass);
+						},
+						initial,
+					),
+				{ overlay: true, overlayOptions: {
+						width: OVERLAY_WIDTH,
+						minWidth: 36,
+						maxHeight: `${OVERLAY_HEIGHT_SHARE * 100}%`,
+						anchor: "center",
+						margin: OVERLAY_MARGIN,
+					} },
+			);
 		},
 	});
 }
