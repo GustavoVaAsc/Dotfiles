@@ -38,7 +38,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
 2. Adds `"file:<this repo>/kosmos-pi"` to `~/.pi/agent/settings.json` if not already present. The path is written by the installer, not stored in the repo, so the checked-in `settings.json` stays machine-independent.
 3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp-adapter.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
-4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `install.sh` symlinks to `~/.config/mcp/`.
+4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `ai-harness-install.sh` symlinks to `~/.config/mcp/`.
 5. Reports what changed. Safe to re-run.
 
 After running it, restart Pi. The 5 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
