@@ -77,6 +77,18 @@ Catch API keys, cookies and tokens before they are written to transcripts or log
 
 Based on Anthropic's engineering posts on code execution with MCP. Don't load every tool definition into context up front. The agent discovers tools when it needs them and writes a small script that calls them. Large results are filtered in that script, so only a summary comes back into context. This lowers the hidden token cost of tool definitions and large tool results, which grows with every MCP server registered. Skills already load only when needed; this applies the same idea to tools.
 
+### 16. Artifact reviewer
+
+A browser page for reviewing a Markdown document the agent wrote, then sending structured feedback back to the agent. It doubles as a way to produce documentation and designs that live in the repo.
+
+- **Rendering:** a purple theme; headers, lists, tables, code; Mermaid diagrams (flowcharts and similar); images and videos the agent generated (JavaScript rendering, manim or any other tool), referenced from the document.
+- **Questions:** the agent embeds questions in the document in a standard format. The page renders them as single choice, multiple choice or free text, so the reviewer clicks an option or writes their own answer.
+- **Comments:** comments anchored to a line (or range) of the Markdown source, saying what should change and how.
+- **Review loop:** comments and answers are saved as the review goes, then submitted together when the review is done. The agent receives them with line references, addresses them, and the next round starts.
+- **Storage:** documents, their assets and the reviews are saved in the repo.
+
+> **Scope first:** pick the toolchain (vanilla JavaScript or a framework), the question format and how the feedback gets back to the agent before handing it to the coder.
+
 ## Considered, not now
 
 - **Prompt regression evals.** The workflow is still being evaluated through daily use. Writing evals now would lock in behaviours that may be removed later.
