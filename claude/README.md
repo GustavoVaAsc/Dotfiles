@@ -35,7 +35,8 @@ claude/
 │   └── kosmos-docs-writer.md
 └── skills/
     ├── pr-workflow/SKILL.md
-    └── the-cock-of-justice/SKILL.md
+    ├── the-cock-of-justice/SKILL.md
+    └── artifact-review/SKILL.md
 ```
 
 ## What maps to what

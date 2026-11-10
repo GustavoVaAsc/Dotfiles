@@ -22,6 +22,7 @@
   "files": [
     "agents/",
     "skills/",
+    "!skills/artifact-review/",
     "README.md",
     "LICENSE"
   ],

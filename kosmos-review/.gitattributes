@@ -1,0 +1,2 @@
+# Third-party code is vendored; do not show it as a diff or count it as the project language.
+vendor/** -diff linguist-vendored

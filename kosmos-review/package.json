@@ -1,0 +1,21 @@
+{
+  "name": "kosmos-review",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local browser page for reviewing a Markdown document an agent wrote: answer embedded questions, comment on source lines, submit the review to a file.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "bin": {
+    "kosmos-review": "./kosmos-review"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT",
+  "imports": {
+    "#markdown-it": "./vendor/markdown-it/markdown-it.esm.min.mjs",
+    "#highlight.js": "./vendor/highlight.js/highlight.min.js"
+  }
+}

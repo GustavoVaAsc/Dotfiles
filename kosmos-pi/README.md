@@ -18,12 +18,13 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
 
-### Skills (2)
+### Skills (2 published, 1 local)
 
 | Skill | Purpose |
 |---|---|
 | `pr-workflow` | Full PR protocol: pre-flight → commit hygiene → PR description → self-review via specialist fan-out |
 | `the-cock-of-justice` | Dual-lens verdict (spec + quality reviewers in parallel) → ACCEPTED / WARNING / FAIL. Opt-in: fires only on an explicit request |
+| `artifact-review` | **Local Dotfiles installs only; not in the published npm package** (`files` excludes it, because it needs the `kosmos-review/` tool from this repo). Review loop for a long Markdown document: write it with embedded questions, serve it in a local browser page, read the submitted `round-N.json`, revise, repeat |
 
 ## Install
 
@@ -41,7 +42,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `ai-harness-install.sh` symlinks to `~/.config/mcp/`.
 5. Reports what changed. Safe to re-run.
 
-After running it, restart Pi. The 5 agents appear under `kosmos.*` and the 2 skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`.
+After running it, restart Pi. The 5 agents appear under `kosmos.*` and the skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`, plus `/skill:artifact-review` when installed from this repo (see above).
 
 ### From npm (after publishing)
 
@@ -176,7 +177,9 @@ Dotfiles/
     └── skills/               # Declared under pi.skills
         ├── pr-workflow/
         │   └── SKILL.md
-        └── the-cock-of-justice/
+        ├── the-cock-of-justice/
+        │   └── SKILL.md
+        └── artifact-review/     # local installs only; excluded from the npm package by package.json "files"
             └── SKILL.md
 ```
 

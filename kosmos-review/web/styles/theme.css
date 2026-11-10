@@ -1,0 +1,71 @@
+/* Design tokens. Dark is the default; theme-init.js sets data-theme="light" or "dark" before first paint.
+   Purple palette taken from the kosmos Pi/Claude themes (#a855f7 family). */
+:root {
+  color-scheme: dark;
+
+  --bg: #0f0a1a;
+  --surface: #1a0d2e;
+  --surface-2: #2a1a3e;
+  --border: #3b2a57;
+  --fg: #e4e4e7;
+  --fg-muted: #a1a1aa;
+
+  --accent: #a855f7;
+  --accent-strong: #7c3aed;
+  --accent-soft: #c084fc;
+  --accent-text: #d8b4fe;
+  --accent-faint: rgba(168, 85, 247, 0.13);
+  --on-accent: #ffffff;
+  --focus: #c084fc;
+
+  --success: #4ade80;
+  --error: #f87171;
+  --warning: #facc15;
+
+  --code-bg: #150a26;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  --tok-keyword: #c084fc;
+  --tok-string: #86efac;
+  --tok-number: #fbbf24;
+  --tok-comment: #8b7aa8;
+  --tok-title: #67e8f9;
+  --tok-attr: #f0abfc;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  --radius: 8px;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #faf7ff;
+  --surface: #ffffff;
+  --surface-2: #f1e8fd;
+  --border: #ddd0f2;
+  --fg: #1f1530;
+  --fg-muted: #6b5b86;
+
+  --accent: #7c3aed;
+  --accent-strong: #6d28d9;
+  --accent-soft: #a855f7;
+  --accent-text: #6d28d9;
+  --accent-faint: rgba(124, 58, 237, 0.09);
+  --on-accent: #ffffff;
+  --focus: #7c3aed;
+
+  --success: #15803d;
+  --error: #b91c1c;
+  --warning: #a16207;
+
+  --code-bg: #f5effd;
+  --shadow: 0 10px 30px rgba(60, 20, 120, 0.16);
+
+  --tok-keyword: #7c3aed;
+  --tok-string: #15803d;
+  --tok-number: #b45309;
+  --tok-comment: #7c6a99;
+  --tok-title: #0e7490;
+  --tok-attr: #a21caf;
+}

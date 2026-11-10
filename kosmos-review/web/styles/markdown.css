@@ -1,0 +1,49 @@
+/* Typography for the rendered document (.md) */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { line-height: 1.25; margin: 1.6em 0 0.5em; color: var(--accent-text); }
+.md h1 { font-size: 1.9rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+.md h2 { font-size: 1.5rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
+.md h3 { font-size: 1.2rem; }
+.md h4 { font-size: 1.05rem; }
+
+.md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0.8em 0; }
+.md ul, .md ol { padding-left: 1.6rem; }
+.md li + li { margin-top: 0.2em; }
+.md li > ul, .md li > ol { margin: 0.2em 0; }
+.md a { color: var(--accent-text); }
+.md a.link-unresolved { color: var(--fg-muted); text-decoration: underline dotted; cursor: help; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.md blockquote { padding: 0.1rem 1rem; border-left: 3px solid var(--accent); color: var(--fg-muted); background: var(--accent-faint); border-radius: 0 6px 6px 0; }
+
+.md code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+.md pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem 1rem; overflow-x: auto; }
+.md pre code { background: none; padding: 0; font-size: 0.88rem; }
+
+.md table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--border); padding: 0.4rem 0.75rem; text-align: left; }
+.md th { background: var(--surface-2); color: var(--accent-text); }
+.md tbody tr:nth-child(even) { background: var(--accent-faint); }
+
+.md img, .md video { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg); }
+.md img:not([src]), .md video:not([src]) { min-height: 4rem; min-width: 8rem; }
+.md .asset-error { outline: 2px dashed var(--error); }
+.md .asset-missing { color: var(--error); font-style: italic; }
+
+.md .mermaid-block { margin: 1rem 0; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow-x: auto; text-align: center; }
+.md .mermaid-block pre { margin: 0; border: none; text-align: left; }
+.md .mermaid-block svg { max-width: 100%; height: auto; }
+.md .mermaid-error { border-color: var(--error); }
+.md .mermaid-message { color: var(--error); font-size: 0.85rem; text-align: left; padding: 0.4rem 1rem; }
+
+/* highlight.js tokens, themed through custom properties */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in, .hljs-doctag, .hljs-type { color: var(--tok-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta .hljs-string { color: var(--tok-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link { color: var(--tok-number); }
+.hljs-comment, .hljs-quote, .hljs-deletion { color: var(--tok-comment); font-style: italic; }
+.hljs-title, .hljs-section, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: var(--tok-title); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property, .hljs-params { color: var(--tok-attr); }
+.hljs-meta { color: var(--fg-muted); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

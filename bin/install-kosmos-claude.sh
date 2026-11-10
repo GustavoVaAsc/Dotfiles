@@ -22,7 +22,22 @@
 #      An unreadable settings.json aborts the install untouched.
 #   3. Registers the MCP servers from mcp/mcp.json (the same file Pi reads) at
 #      user scope with `claude mcp add-json`, skipping servers that already
-#      exist. Needs `claude` on PATH; skipped with --no-mcp.
+#      exist. Needs `claude` on PATH; skipped with --no-mcp. `claude` is the
+#      only writer of .claude.json here, and every running Claude Code process
+#      rewrites that file too, so two writers can corrupt it. As a best-effort
+#      guard, registration is skipped (a warning, exit 0, repeated at the end;
+#      the manual `claude mcp add-json` commands are printed) when:
+#        - .claude.json exists but is not a valid JSON object: `claude` is not
+#          run and the file is left as is. Move it aside or restore one of
+#          Claude Code's automatic backups,
+#          <config dir>/backups/.claude.json.backup.*, then re-run;
+#        - Claude Code is running, this script runs inside a Claude Code session
+#          (CLAUDECODE set), or the process list cannot be read so Claude Code
+#          cannot be ruled out: close Claude Code and re-run.
+#      The running check happens right before each server is added, so it is
+#      only needed when something has to be added; a session started in that
+#      window can still race. A `claude` failure is still an error (exit 1) and
+#      its output is shown.
 #
 # CLAUDE_CONFIG_DIR is honoured: the target is $CLAUDE_CONFIG_DIR, else ~/.claude.
 #
@@ -305,8 +320,121 @@ PY
 # mcp/mcp.json is the single source for the server list (Pi reads it through
 # ~/.config/mcp). Claude Code keeps user-scope servers in .claude.json, which
 # lives in $CLAUDE_CONFIG_DIR when set and next to ~/.claude otherwise.
+#
+# This script never writes .claude.json itself; `claude mcp add-json` does, and
+# every running Claude Code process rewrites that file too, so two writers can
+# corrupt it. As a best-effort guard, registration is skipped (a warning, not a
+# failure) when the file is already unparseable or when Claude Code is running
+# or cannot be ruled out. The running check is repeated right before each
+# `claude mcp add-json`, but a session that starts in between can still race.
 
 MCP_FAILED=0
+MCP_SKIP_REASON=""
+
+# claude_pids: comma-separated PIDs of running Claude Code processes, empty if
+# none. Exit 2 when the process list cannot be trusted (ps failed, printed
+# nothing, or does not even list this script), so callers fail closed.
+#
+# Classifies on `ps -axwwo pid=,args=` only (ww: BSD/macOS ps would truncate
+# args; comm= is a full path on macOS and may hold spaces or a version number on
+# Linux). The executable is the first argument or, for an absolute path with
+# spaces, the text up to the first `/claude `, `/node `, `/nodejs `, `/bun ` or
+# `/claude/versions/<ver>`, provided nothing before it looks like a further
+# argument (` /` or ` -`) and that path exists and is executable (so
+# `/usr/bin/vim ./claude` or `/usr/bin/cat foo/claude` are not read as a path
+# with a space). Matches:
+#   - the native binary: executable named `claude`, or under .../claude/versions/;
+#   - the npm install: `node|nodejs|bun ...` with any argument that is a path
+#     named `claude` (the npm shim) or contains
+#     /node_modules/@anthropic-ai/claude-code/ (cli.js).
+# Arguments are never matched otherwise, so this script, `vim claude/x.json`,
+# `grep claude` and `node server.js --name claude` are not mistaken for a session.
+# Undetectable: a native binary renamed to something else, a path with spaces
+# that is not readable by this user (or has ` /` or ` -` or a `'` in a directory
+# name), and processes hidden from ps (other users' processes in a container).
+claude_pids() {
+	local listing
+	listing="$(ps -axwwo pid=,args= 2>/dev/null)" || return 2
+	[ -n "$listing" ] || return 2
+	printf '%s\n' "$listing" | awk -v self="$$" '
+		function base(path,   n, parts) { n = split(path, parts, "/"); return parts[n] }
+		function executable(path) {
+			if (index(path, "\047") > 0) return 0
+			return system("test -x \047" path "\047") == 0
+		}
+		function split_exe(line,   padded, mark, name, n, k, i, j, end, cand) {
+			padded = line " "
+			if (substr(line, 1, 1) == "/") {
+				n = split("/claude ;/node ;/nodejs ;/bun ;/claude/versions/", mark, ";")
+				split("claude node nodejs bun claude", name, " ")
+				for (k = 1; k <= n; k++) {
+					i = index(padded, mark[k])
+					if (i == 0 || substr(padded, 1, i - 1) ~ " [/-]") continue
+					if (k < n) end = i + length(mark[k]) - 2
+					else { j = index(substr(padded, i), " "); end = i + j - 2 }
+					cand = substr(padded, 1, end)
+					if (index(cand, " ") > 0 && !executable(cand)) continue
+					exe = name[k]
+					rest = substr(padded, end + 2)
+					return
+				}
+			}
+			cand = line
+			sub(/ .*/, "", cand)
+			exe = base(cand)
+			rest = substr(line, length(cand) + 2)
+		}
+		{
+			if ($1 == self) seen = 1
+			line = $0
+			sub(/^ *[0-9]+ +/, "", line)
+			split_exe(line)
+			hit = (exe == "claude")
+			if (!hit && (exe == "node" || exe == "nodejs" || exe == "bun")) {
+				if (index(rest, "/node_modules/@anthropic-ai/claude-code/") > 0) hit = 1
+				n = split(rest, args, " ")
+				for (i = 1; i <= n; i++)
+					if (index(args[i], "/") > 0 && base(args[i]) == "claude") hit = 1
+			}
+			if (hit) pids = pids (pids == "" ? "" : ",") $1
+		}
+		END { if (!seen) exit 2; print pids }
+	'
+}
+
+# claude_blocker: print why registering now could race another .claude.json
+# writer, or print nothing when it looks safe. Fails closed: if the process
+# list cannot be read, that is a reason too.
+claude_blocker() {
+	local pids rc=0
+	if [ -n "${CLAUDECODE:-}" ]; then
+		echo "this script is running inside a Claude Code session (CLAUDECODE is set)"
+		return 0
+	fi
+	pids="$(claude_pids)" || rc=$?
+	if [ "$rc" -ne 0 ]; then
+		echo "Claude Code could not be ruled out (the process list from ps was unavailable or incomplete)"
+	elif [ -n "$pids" ]; then
+		echo "Claude Code is running (pid $pids)"
+	fi
+}
+
+# mcp_add_command <name> <json>: the manual registration command, pasteable into
+# a shell (single quotes in the JSON are escaped).
+mcp_add_command() {
+	local esc
+	esc=${2//\'/\'\\\'\'}
+	echo "claude mcp add-json --scope user $1 '$esc'"
+}
+
+# print_mcp_commands <plan>: the manual registration command for each "add" line.
+print_mcp_commands() {
+	local action name json
+	while IFS=$'\t' read -r action name json; do
+		[ "$action" = "add" ] || continue
+		echo "  $(mcp_add_command "$name" "$json")"
+	done <<<"$1"
+}
 
 if $NO_MCP; then
 	echo "→ MCP servers: skipped (--no-mcp)"
@@ -323,7 +451,9 @@ else
 		CLAUDE_JSON="$HOME/.claude.json"
 	fi
 
-	# One line per server: "have<TAB>name" or "add<TAB>name<TAB>json".
+	# One line per server: "have<TAB>name" or "add<TAB>name<TAB>json". A single
+	# "invalid<TAB>reason" line instead when .claude.json exists but is not a
+	# JSON object (or its mcpServers is not), so it is never handed to `claude`.
 	MCP_PLAN="$(python3 - "$MCP_SRC" "$CLAUDE_JSON" <<'PY'
 import json, pathlib, sys
 
@@ -332,9 +462,17 @@ claude_json = pathlib.Path(sys.argv[2])
 have = {}
 if claude_json.exists():
     try:
-        have = json.loads(claude_json.read_text()).get("mcpServers", {}) or {}
-    except Exception:
-        pass
+        live = json.loads(claude_json.read_text())
+    except Exception as exc:
+        print(f"invalid\t{exc}")
+        sys.exit(0)
+    if not isinstance(live, dict):
+        print("invalid\tnot a JSON object")
+        sys.exit(0)
+    have = live.get("mcpServers") or {}
+    if not isinstance(have, dict):
+        print("invalid\tmcpServers is not a JSON object")
+        sys.exit(0)
 for name, config in wanted.items():
     if name in have:
         print(f"have\t{name}")
@@ -343,19 +481,64 @@ for name, config in wanted.items():
 PY
 )"
 
-	while IFS=$'\t' read -r action name json; do
-		[ -n "$action" ] || continue
-		if [ "$action" = "have" ]; then
-			echo "  ✓ MCP server $name already registered"
-		elif $DRY_RUN; then
-			echo "[dry-run] would register MCP server $name"
-		elif claude mcp add-json --scope user "$name" "$json" >/dev/null 2>&1; then
-			echo "  ✓ registered MCP server $name"
+	IFS=$'\t' read -r MCP_FIRST MCP_DETAIL <<<"$MCP_PLAN"
+	if [ "$MCP_FIRST" = "invalid" ]; then
+		MCP_SKIP_REASON="$CLAUDE_JSON is not valid JSON ($MCP_DETAIL)"
+		if $DRY_RUN; then
+			echo "[dry-run] would skip MCP registration: $MCP_SKIP_REASON"
+			echo "[dry-run] claude would not be run and the file would not be touched"
+			echo "  A Claude Code running mid-write can cause a transient parse failure; if it"
+			echo "  persists, move the file aside or restore the newest good copy from"
+			echo "  $CLAUDE_DIR/backups/.claude.json.backup.*, then re-run this script."
 		else
-			MCP_FAILED=$((MCP_FAILED + 1))
-			echo "warning: could not register MCP server $name; add it with: claude mcp add-json --scope user $name '$json'" >&2
+			echo "warning: $MCP_SKIP_REASON" >&2
+			echo "  Skipped MCP registration; $CLAUDE_JSON was not touched and claude was not run." >&2
+			echo "  A Claude Code running mid-write can cause a transient parse failure; if it" >&2
+			echo "  persists, move the file aside or restore the newest good copy from" >&2
+			echo "  $CLAUDE_DIR/backups/.claude.json.backup.*, then re-run this script." >&2
 		fi
-	done <<<"$MCP_PLAN"
+	else
+		MCP_LEFT=""
+		while IFS=$'\t' read -r action name json; do
+			[ -n "$action" ] || continue
+			if [ "$action" = "have" ]; then
+				echo "  ✓ MCP server $name already registered"
+				continue
+			fi
+			# Checked per server, right before the write, to narrow the race window.
+			# Once a blocker fires, every remaining server is skipped.
+			if [ -z "$MCP_SKIP_REASON" ]; then
+				MCP_SKIP_REASON="$(claude_blocker)"
+			fi
+			if [ -n "$MCP_SKIP_REASON" ]; then
+				MCP_LEFT="$MCP_LEFT$action"$'\t'"$name"$'\t'"$json"$'\n'
+			elif $DRY_RUN; then
+				echo "[dry-run] would register MCP server $name"
+			elif MCP_ERR="$(claude mcp add-json --scope user "$name" "$json" 2>&1 </dev/null)"; then
+				echo "  ✓ registered MCP server $name"
+			else
+				MCP_FAILED=$((MCP_FAILED + 1))
+				echo "warning: could not register MCP server $name; add it with: $(mcp_add_command "$name" "$json")" >&2
+				if [ -n "$MCP_ERR" ]; then
+					echo "  claude said:" >&2
+					printf '%s\n' "$MCP_ERR" | sed 's/^/    /' >&2
+				fi
+			fi
+		done <<<"$MCP_PLAN"
+
+		if [ -n "$MCP_LEFT" ]; then
+			if $DRY_RUN; then
+				echo "[dry-run] would skip MCP registration: $MCP_SKIP_REASON"
+				echo "[dry-run] close Claude Code, then run:"
+				print_mcp_commands "$MCP_LEFT"
+			else
+				echo "warning: skipped MCP registration: $MCP_SKIP_REASON." >&2
+				echo "  A running Claude Code rewrites .claude.json and can collide with" >&2
+				echo "  \`claude mcp add-json\`. Close Claude Code and re-run this script, or run:" >&2
+				print_mcp_commands "$MCP_LEFT" >&2
+			fi
+		fi
+	fi
 fi
 
 # --- summary -------------------------------------------------------------------
@@ -368,6 +551,13 @@ else
 	echo "Start a new Claude Code session: the header reads @kosmos-orchestrator and the"
 	echo "status line shows '● kosmos-orchestrator'. The kosmos-* specialists"
 	echo "are in $CLAUDE_DIR/agents/; /pr-workflow and /the-cock-of-justice are available."
+fi
+if [ -n "$MCP_SKIP_REASON" ]; then
+	if $DRY_RUN; then
+		echo "[dry-run] MCP registration would be skipped (some or all servers); see above."
+	else
+		echo "warning: MCP registration was skipped (some or all servers not registered); see the warning above." >&2
+	fi
 fi
 if [ "$MCP_FAILED" -gt 0 ]; then
 	echo "$MCP_FAILED MCP server(s) were not registered; see the warnings above." >&2

@@ -87,7 +87,34 @@ A browser page for reviewing a Markdown document the agent wrote, then sending s
 - **Review loop:** comments and answers are saved as the review goes, then submitted together when the review is done. The agent receives them with line references, addresses them, and the next round starts.
 - **Storage:** documents, their assets and the reviews are saved in the repo.
 
-> **Scope first:** pick the toolchain (vanilla JavaScript or a framework), the question format and how the feedback gets back to the agent before handing it to the coder.
+**Status: v1 built** in `kosmos-review/`, with the `artifact-review` skill for Claude Code, OpenCode and Pi. See `kosmos-review/README.md` for usage, the question format and the `round-N.json` schema.
+
+Decisions taken for v1:
+
+- **Feedback channel:** files only. The page writes `round-N.json`; the user says "review submitted" in chat and the agent reads the latest round. The agent never blocks waiting for a review.
+- **Toolchain:** Node server with no dependencies, Preact + htm page with no build step, libraries vendored at pinned versions. Structured so a move to Vite + React is mechanical.
+- **Questions:** a `kosmos-question` fenced block (single, multi, text).
+- **Anchors:** block-level line ranges. Each comment also stores a quote and the doc hash, for the robustness steps below.
+- **Storage:** `docs/reviews/<slug>/` in the target project. On first load the page asks whether to keep the review; "no" adds the folder to `.git/info/exclude`.
+- **Location:** Dotfiles for now; the whole `kosmos-review/` folder moves with the agent system if it gets its own repo.
+
+Follow-ups:
+
+- **Robust anchors:** re-anchor comments by quote when lines shift, mark a comment "outdated" when its quote is gone, comments on part of a sentence (character ranges), and a diff view between rounds. The steps are in the README section "Making anchors robust".
+- **Draft safety net:** mirror the draft to `sessionStorage` while the server is unreachable, so edits made after an idle shutdown are not lost.
+- **CLI on `PATH`:** the skill hardcodes `~/Dotfiles/kosmos-review/kosmos-review`. An installer symlink into `~/.local/bin` would remove that (the Claude installer needs it too).
+- **Pi package:** the skill is left out of the published `kosmos-pi` npm package because the tool is not in it. Ship it once `kosmos-review` is its own repo or package.
+- **Browser coverage:** v1 was checked in headless Chrome only. Firefox, Safari, touch devices, video playback and narrow layouts are untested. The Chrome smoke scripts could become an opt-in test.
+- **Vendored Mermaid:** 5.5 MB in the repo. When the tool is extracted, decide between Git LFS and fetching it on demand.
+- **Stale start lock:** a lock left by a crashed `serve` whose pid gets reused by a long-lived process blocks `serve` until the lock is deleted by hand.
+- **Worktrees and submodules:** when `.git` is a file, "do not keep" writes nothing and shows the line to add by hand, because following git's links let the write be steered into another repository. A safe automatic path would need git's own layout checks (or `git rev-parse --git-path` run with a hardened config).
+- **Token rotation:** the URL token stays the same while a server is reused, and it appears in agent transcripts. Rotating it on reuse would shorten its life.
+
+Open ideas:
+
+- **MCP server channel:** expose `open_review`, `get_feedback` and a bounded `wait_for_review` over MCP, writing the same files, so the loop can run without the "review submitted" message. Needs a timeout to respect item 3 and lazy tool loading to respect item 15.
+- **Generate the skill from one source** (item 5): the three skill copies are kept identical by hand today.
+- **Feed the memory system** (items 1 and 12): decisions answered in a review are good candidates for workstream memory and handoff notes.
 
 ## Considered, not now
 
