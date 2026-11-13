@@ -91,7 +91,10 @@ A browser page for reviewing a Markdown document the agent wrote, then sending s
 
 Decisions taken for v1:
 
-- **Feedback channel:** files only. The page writes `round-N.json`; the user says "review submitted" in chat and the agent reads the latest round. The agent never blocks waiting for a review.
+- **Feedback channel:** files. The page writes `round-N.json` and the agent reads the latest round. The agent never blocks its turn waiting for a review.
+  - *Revised after v1:* in Claude Code the agent runs `kosmos-review wait` as a background command that wakes the session on submit; in Pi the `review_watch` extension tool delivers the round and starts a turn. "review submitted" in chat stays as the fallback, and is still the only channel in OpenCode.
+- **Opening the page:** `serve` opens the browser on a fresh start (`--no-open` to disable, skipped without a display).
+- **When to use it:** the orchestrator prompts (all runtimes, and Pi's `SYSTEM.md`) choose between asking directly and a review document: 1 to 4 short decisions are asked directly, anything that needs a document to read becomes a review document, borderline cases ask first. Only the session the user talks to opens one; in Pi that is the main session, because the round is delivered there.
 - **Toolchain:** Node server with no dependencies, Preact + htm page with no build step, libraries vendored at pinned versions. Structured so a move to Vite + React is mechanical.
 - **Questions:** a `kosmos-question` fenced block (single, multi, text).
 - **Anchors:** block-level line ranges. Each comment also stores a quote and the doc hash, for the robustness steps below.
@@ -109,10 +112,12 @@ Follow-ups:
 - **Stale start lock:** a lock left by a crashed `serve` whose pid gets reused by a long-lived process blocks `serve` until the lock is deleted by hand.
 - **Worktrees and submodules:** when `.git` is a file, "do not keep" writes nothing and shows the line to add by hand, because following git's links let the write be steered into another repository. A safe automatic path would need git's own layout checks (or `git rev-parse --git-path` run with a hardened config).
 - **Token rotation:** the URL token stays the same while a server is reused, and it appears in agent transcripts. Rotating it on reuse would shorten its life.
+- **TODO: OpenCode auto-send.** Claude Code and Pi deliver the submitted round automatically; OpenCode still needs "review submitted" in chat. Investigate whether an OpenCode plugin can watch the review folder (or run `kosmos-review wait`) and post the round into the session so it starts a turn.
+- **Live runtime checks:** the Claude Code background `wait` and the Pi `review_watch` delivery were tested with unit tests and a fake `pi`, not in a live session. Confirm both end to end, including whether Claude Code limits how long a background command may run.
 
 Open ideas:
 
-- **MCP server channel:** expose `open_review`, `get_feedback` and a bounded `wait_for_review` over MCP, writing the same files, so the loop can run without the "review submitted" message. Needs a timeout to respect item 3 and lazy tool loading to respect item 15.
+- **MCP server channel:** expose `open_review`, `get_feedback` and a bounded `wait_for_review` over MCP, writing the same files. Less needed now that Claude Code and Pi deliver rounds automatically; still a way to cover OpenCode and other MCP clients with one implementation. Needs a timeout to respect item 3 and lazy tool loading to respect item 15.
 - **Generate the skill from one source** (item 5): the three skill copies are kept identical by hand today.
 - **Feed the memory system** (items 1 and 12): decisions answered in a review are good candidates for workstream memory and handoff notes.
 

@@ -346,3 +346,45 @@ test('"Do not keep" in a worktree shows the exact line to add and the command th
   assert.ok(text().includes('nothing was written automatically'));
   unmount();
 });
+
+// ---- auto-send banner ----
+
+async function submitFlow(submitResult) {
+  const api = fakeApi();
+  api.submit = async (p) => {
+    api.calls.submit.push(p);
+    api.state.rounds = [{ round: 1, file: 'docs/reviews/demo/round-1.json', comments: 0, answers: 0 }];
+    api.state.status = 'submitted'; api.state.draft = null; api.state.round = 2;
+    return { ok: true, round: 1, file: 'docs/reviews/demo/round-1.json', ...submitResult };
+  };
+  const m = await mount(api);
+  fire(byText(m.root, 'button', 'Submit review'), 'click'); // no comments: confirm() is stubbed to true
+  await settle(200);
+  return m;
+}
+
+test('after submit with an active listener the banner says the review was sent to the agent', async () => {
+  const { text, unmount } = await submitFlow({ listener: { active: true, count: 1 } });
+  assert.ok(text().includes('sent to the agent'));
+  assert.ok(text().includes('should be picked up automatically'), 'a hope, not a guarantee');
+  assert.ok(text().includes('if the agent does not respond, tell it'), 'and the fallback is named');
+  assert.ok(!text().includes('Tell the agent'));
+  assert.ok(!text().includes('nothing to type'), 'no overclaiming');
+  unmount();
+});
+
+test('after submit with no listener the banner still asks the user to tell the agent', async () => {
+  const { text, unmount } = await submitFlow({ listener: { active: false, count: 0 } });
+  assert.ok(text().includes('Tell the agent "review submitted"'));
+  assert.ok(!text().includes('sent to the agent'));
+  unmount();
+});
+
+test('after a reload the page cannot know how the round was delivered and says so honestly', async () => {
+  const api = fakeApi({ state: { status: 'submitted', rounds: [{ round: 1, file: 'docs/reviews/demo/round-1.json', comments: 1, answers: 0 }], round: 2 } });
+  const { text, unmount } = await mount(api);
+  assert.ok(text().includes('Round 1 submitted'));
+  assert.ok(!text().includes('sent to the agent'), 'no claim it cannot back up');
+  assert.ok(text().includes('review submitted'), 'the manual fallback is still named');
+  unmount();
+});

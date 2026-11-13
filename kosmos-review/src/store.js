@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { confine, PathError } from './paths.js';
 import { createMutex } from './mutex.js';
+import { signRound } from './roundmac.js';
 import { parseReview } from './validate.js';
 
 const MAX_DOC_BYTES = 5 * 1024 * 1024;
@@ -22,12 +23,18 @@ export class ConflictError extends Error {
 
 const sha256 = (bytes) => 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
 
+/** Numbers of the regular files named round-N.json in a review folder, ascending. Directories and symlinks do not count. */
+export async function listRoundNumbers(reviewDir) {
+  const entries = await fs.readdir(reviewDir, { withFileTypes: true });
+  return entries.filter((e) => e.isFile()).map((e) => ROUND_RE.exec(e.name)).filter(Boolean).map((m) => Number(m[1])).sort((a, b) => a - b);
+}
+
 export function isAnswered(answer) {
   if (answer.type === 'text') return answer.text.trim() !== '';
   return answer.selected.length > 0 || answer.other.trim() !== '';
 }
 
-export function createStore({ reviewDir, projectRoot, slug, relReviewDir }) {
+export function createStore({ reviewDir, projectRoot, slug, relReviewDir, roundKey = null }) {
   const rel = relReviewDir ?? `docs/reviews/${slug}`;
   const metaLock = createMutex();
   let identity = null; // { dev, ino } of the review folder when the server started
@@ -94,11 +101,7 @@ export function createStore({ reviewDir, projectRoot, slug, relReviewDir }) {
     }
   }
 
-  async function roundNumbers() {
-    // Only regular files count: a directory or symlink named round-N.json is not a submitted round.
-    const entries = await fs.readdir(reviewDir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile()).map((e) => ROUND_RE.exec(e.name)).filter(Boolean).map((m) => Number(m[1])).sort((a, b) => a - b);
-  }
+  const roundNumbers = () => listRoundNumbers(reviewDir);
 
   async function writeMeta(patch) {
     const meta = { ...(await store.readMeta()), ...patch };
@@ -184,6 +187,7 @@ export function createStore({ reviewDir, projectRoot, slug, relReviewDir }) {
           comments: [...review.comments].sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine || a.id.localeCompare(b.id)),
           answers: review.answers.map((a) => ({ ...a, answered: isAnswered(a) })),
         };
+        if (roundKey) body.mac = signRound(roundKey, body); // lets `wait`/`latest` tell a round the server wrote from a planted file
         try {
           await writeAtomic(`round-${round}.json`, toJson(body), { exclusive: true });
         } catch (err) {

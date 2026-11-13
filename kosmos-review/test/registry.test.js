@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { stateDir, idFor, writeEntry, readEntry, removeEntry, findLive, acquireStartLock } from '../src/registry.js';
+import { stateDir, idFor, writeEntry, readEntry, removeEntry, findLive, acquireStartLock, keyDir } from '../src/registry.js';
 import { tmpDir } from './helpers.js';
 
 test('stateDir creates a private directory and honours KOSMOS_REVIEW_STATE_DIR', async () => {
@@ -109,5 +109,32 @@ test('acquireStartLock waits for a live owner, then gives up; a reusable server 
     await assert.rejects(acquireStartLock(dir, id, { reuse: async () => null, waitMs: 300 }), /in progress/);
     const live = { port: 9 };
     assert.deepEqual(await acquireStartLock(dir, id, { reuse: async () => live, waitMs: 300 }), { live });
+  } finally { await t.cleanup(); }
+});
+
+// ---- fix round 2: where the round key lives ----
+
+test('the round key directory is under XDG_STATE_HOME (default ~/.local/state), private and owner-checked, not the runtime dir', async () => {
+  const t = await tmpDir();
+  try {
+    const xdg = path.join(t.dir, 'state-home');
+    const got = await keyDir({ XDG_STATE_HOME: xdg, XDG_RUNTIME_DIR: path.join(t.dir, 'run'), HOME: t.dir });
+    assert.equal(got, path.join(xdg, 'kosmos-review'));
+    assert.equal((await fs.stat(got)).mode & 0o077, 0);
+    assert.equal(await keyDir({ HOME: path.join(t.dir, 'home') }), path.join(t.dir, 'home', '.local', 'state', 'kosmos-review'));
+    assert.equal(await keyDir({ XDG_STATE_HOME: 'relative/path', HOME: path.join(t.dir, 'home2') }), path.join(t.dir, 'home2', '.local', 'state', 'kosmos-review'), 'a relative XDG_STATE_HOME is ignored, as the spec says');
+    await assert.rejects(fs.stat(path.join(t.dir, 'run')), 'nothing was created in the runtime directory');
+  } finally { await t.cleanup(); }
+});
+
+test('KOSMOS_REVIEW_STATE_DIR (used by the tests) keeps the key next to the registry; a symlinked key directory is refused', async () => {
+  const t = await tmpDir();
+  try {
+    const dir = path.join(t.dir, 's');
+    assert.equal(await keyDir({ KOSMOS_REVIEW_STATE_DIR: dir }), dir);
+    const real = path.join(t.dir, 'real');
+    await fs.mkdir(real, { mode: 0o700 });
+    await fs.symlink(real, path.join(t.dir, 'link'));
+    await assert.rejects(keyDir({ KOSMOS_REVIEW_STATE_DIR: path.join(t.dir, 'link') }));
   } finally { await t.cleanup(); }
 });

@@ -23,6 +23,11 @@ async function boot(opts = {}) {
     token: TOKEN,
     idleMs: opts.idleMs ?? 0,
     onIdle: opts.onIdle,
+    listenerLeaseMs: opts.listenerLeaseMs,
+    ticketTtlMs: opts.ticketTtlMs,
+    launcherPath: opts.launcherPath,
+    launcherTtlMs: opts.launcherTtlMs,
+    roundKey: opts.roundKey,
     webDir: path.join(ROOT, 'web'),
     vendorDir: path.join(ROOT, 'vendor'),
   });
@@ -443,4 +448,183 @@ test('keep prompt in a worktree or submodule (.git is a file): asked, and "no" i
   assert.equal(after.meta.keep, false);
   assert.equal(after.needsKeepPrompt, false);
   assert.deepEqual((await fs.readdir(p.root)).sort(), ['.git', 'docs']);
+});
+
+// ---- listeners (auto-send) ----
+
+const listener = (request, write, id, action = 'beat') => request('POST', '/api/listener', { headers: write, body: { id, action } });
+
+test('a waiting agent registers as a listener through the authenticated endpoint; the state and the submit response say so', async () => {
+  const { request, auth, write } = await boot();
+  assert.deepEqual((await state(request, auth)).json.listener, { active: false, count: 0 });
+  const res = await listener(request, write, 'waiter-0001');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json, { ok: true, active: true, count: 1 });
+  assert.deepEqual((await state(request, auth)).json.listener, { active: true, count: 1 });
+  await listener(request, write, 'waiter-0002');
+  assert.equal((await state(request, auth)).json.listener.count, 2);
+  await listener(request, write, 'waiter-0001', 'stop');
+  assert.deepEqual((await state(request, auth)).json.listener, { active: true, count: 1 });
+  await listener(request, write, 'waiter-0002', 'stop');
+  assert.deepEqual((await state(request, auth)).json.listener, { active: false, count: 0 });
+});
+
+test('a listener that stops sending heartbeats expires by itself (a dead waiter does not linger)', async () => {
+  const { request, auth, write } = await boot({ listenerLeaseMs: 200 });
+  await listener(request, write, 'waiter-0001');
+  await new Promise((r) => setTimeout(r, 120));
+  await listener(request, write, 'waiter-0001'); // heartbeat renews the lease
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal((await state(request, auth)).json.listener.active, true, 'renewed, so still active');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual((await state(request, auth)).json.listener, { active: false, count: 0 });
+});
+
+test('the submit response reports whether a listener was active at that moment, before the waiter can unregister', async () => {
+  const { request, auth, write } = await boot();
+  const st = (await state(request, auth)).json;
+  const none = await request('POST', '/api/submit', { headers: write, body: validReview({ docHash: st.doc.hash }) });
+  assert.deepEqual(none.json.listener, { active: false, count: 0 });
+  await listener(request, write, 'waiter-0001');
+  const some = await request('POST', '/api/submit', { headers: write, body: validReview({ docHash: st.doc.hash }) });
+  assert.deepEqual(some.json.listener, { active: true, count: 1 });
+});
+
+test('the listener endpoint needs the token, JSON, and a sane body; the number of listeners is capped', async () => {
+  const { request, auth, write } = await boot();
+  assert.equal((await request('POST', '/api/listener', { headers: { 'content-type': 'application/json' }, body: { id: 'waiter-0001', action: 'beat' } })).status, 401);
+  assert.equal((await request('POST', '/api/listener', { headers: { ...auth, 'content-type': 'text/plain' }, body: '{}' })).status, 415);
+  assert.equal((await request('POST', '/api/listener', { headers: { ...write, origin: 'http://evil.example' }, body: { id: 'waiter-0001', action: 'beat' } })).status, 403);
+  for (const body of [{ id: 'x', action: 'beat' }, { id: '../../etc', action: 'beat' }, { id: 'waiter-0001', action: 'kill' }, { id: 5, action: 'beat' }, {}, []]) {
+    assert.equal((await request('POST', '/api/listener', { headers: write, body })).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await request('GET', '/api/listener', { headers: auth })).status, 405);
+  for (let i = 0; i < 16; i += 1) assert.equal((await listener(request, write, `waiter-${String(i).padStart(4, '0')}`)).status, 200);
+  assert.equal((await listener(request, write, 'waiter-9999')).status, 409, 'cap reached');
+  assert.equal((await listener(request, write, 'waiter-0000')).status, 200, 'an existing one may still renew');
+});
+
+test('rejected or unauthenticated listener requests are not activity for the idle timer', async () => {
+  let idle = 0;
+  const { request, port } = await boot({ idleMs: 250, onIdle: () => { idle += 1; } });
+  const until = Date.now() + 600;
+  while (Date.now() < until) {
+    await request('POST', '/api/listener', { headers: { 'content-type': 'application/json' }, body: { id: 'waiter-0001', action: 'beat' } });
+    await request('POST', '/api/listener', { host: 'evil.example:' + port, headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, body: { id: 'waiter-0001', action: 'beat' } });
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.equal(idle, 1);
+});
+
+// ---- fix round 1 (auto-send hardening) ----
+
+test('listener beats are not activity: a waiter must not keep the server (and its token) alive by itself', async () => {
+  let idle = 0;
+  const { request, write } = await boot({ idleMs: 300, onIdle: () => { idle += 1; } });
+  const until = Date.now() + 700;
+  while (Date.now() < until) {
+    assert.equal((await listener(request, write, 'waiter-0001')).status, 200);
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  assert.equal(idle, 1, 'the idle timer fired on schedule despite the heartbeats');
+});
+
+test('a listener bound to a dead pid is not reported, so a killed waiter does not claim delivery', async () => {
+  const { request, auth, write } = await boot({ listenerLeaseMs: 60_000 });
+  const dead = Number(spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout);
+  const post = (pid) => request('POST', '/api/listener', { headers: write, body: { id: 'waiter-0001', action: 'beat', pid } });
+  assert.equal((await post(dead)).status, 200);
+  assert.deepEqual((await state(request, auth)).json.listener, { active: false, count: 0 }, 'pid is gone');
+  assert.equal((await post(process.pid)).status, 200);
+  assert.deepEqual((await state(request, auth)).json.listener, { active: true, count: 1 }, 'pid alive');
+  for (const bad of ['5', -1, 0, 1.5, 2 ** 40]) assert.equal((await post(bad)).status, 400, String(bad));
+});
+
+const mint = (request, write) => request('POST', '/api/ticket', { headers: write, body: {} });
+const redeem = (request, ticket, extra = {}) => request('POST', '/api/session', { headers: { 'content-type': 'application/json', ...extra }, body: { ticket } });
+
+test('a single-use bootstrap ticket is exchanged once for the real token', async () => {
+  const { request, write } = await boot();
+  const t = await mint(request, write);
+  assert.equal(t.status, 200);
+  assert.match(t.json.ticket, /^[A-Za-z0-9_-]{32,64}$/);
+  assert.notEqual(t.json.ticket, TOKEN);
+  const first = await redeem(request, t.json.ticket);
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.json, { token: TOKEN });
+  assert.equal((await redeem(request, t.json.ticket)).status, 401, 'the ticket is deleted on use');
+});
+
+test('a ticket expires, and it is not a token', async () => {
+  const { request, write } = await boot({ ticketTtlMs: 150 });
+  const t = (await mint(request, write)).json.ticket;
+  assert.equal((await request('GET', '/api/state', { headers: { authorization: 'Bearer ' + t } })).status, 401, 'not usable as a bearer token');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal((await redeem(request, t)).status, 401, 'expired');
+});
+
+test('the ticket endpoints have the usual guards: minting needs the token; redeeming needs Host, Origin, JSON and a sane body', async () => {
+  const { request, write, port } = await boot();
+  assert.equal((await request('POST', '/api/ticket', { headers: { 'content-type': 'application/json' }, body: {} })).status, 401);
+  const t = (await mint(request, write)).json.ticket;
+  assert.equal((await request('POST', '/api/session', { headers: { 'content-type': 'application/json', origin: 'http://evil.example' }, body: { ticket: t } })).status, 403);
+  assert.equal((await request('POST', '/api/session', { host: 'evil.example:' + port, headers: { 'content-type': 'application/json' }, body: { ticket: t } })).status, 403);
+  assert.equal((await request('POST', '/api/session', { headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ ticket: t }) })).status, 415);
+  assert.equal((await redeem(request, 5)).status, 400);
+  assert.equal((await redeem(request, 'short')).status, 400);
+  assert.equal((await request('GET', '/api/session')).status, 405);
+  assert.equal((await redeem(request, t)).status, 200, 'the rejected attempts did not burn the ticket');
+});
+
+test('failed ticket attempts are not activity, and the number of outstanding tickets is capped', async () => {
+  let idle = 0;
+  const { request, write } = await boot({ idleMs: 300, onIdle: () => { idle += 1; } });
+  const until = Date.now() + 600;
+  while (Date.now() < until) { await redeem(request, 'x'.repeat(40)); await new Promise((r) => setTimeout(r, 50)); }
+  assert.equal(idle, 1);
+  for (let i = 0; i < 8; i += 1) assert.equal((await mint(request, write)).status, 200);
+  assert.equal((await mint(request, write)).status, 409);
+});
+
+test('submit adds a MAC when the server has a round key, and none when it has not', async () => {
+  const key = Buffer.alloc(32, 7);
+  const a = await boot({ roundKey: key });
+  const st = (await state(a.request, a.auth)).json;
+  await a.request('POST', '/api/submit', { headers: a.write, body: validReview({ docHash: st.doc.hash }) });
+  const withKey = JSON.parse(await fs.readFile(path.join(a.p.reviewDir, 'round-1.json'), 'utf8'));
+  assert.match(withKey.mac, /^hmac-sha256:[0-9a-f]{64}$/);
+  const b = await boot();
+  await b.request('POST', '/api/submit', { headers: b.write, body: validReview({ docHash: (await state(b.request, b.auth)).json.doc.hash }) });
+  assert.equal('mac' in JSON.parse(await fs.readFile(path.join(b.p.reviewDir, 'round-1.json'), 'utf8')), false);
+});
+
+// ---- fix round 2: the launcher file that carries the ticket ----
+
+test('the server deletes the launcher file the moment its ticket is redeemed', async () => {
+  const dir = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'kr-launch-'));
+  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
+  const launcherPath = path.join(dir, '0123456789abcdef.open.html');
+  const { request, write } = await boot({ launcherPath, launcherTtlMs: 60_000 });
+  const t = (await mint(request, write)).json.ticket;
+  await fs.writeFile(launcherPath, 'x');
+  assert.equal((await redeem(request, 'z'.repeat(40))).status, 401, 'a failed attempt leaves it alone');
+  assert.ok(await fs.stat(launcherPath));
+  assert.equal((await redeem(request, t)).status, 200);
+  await assert.rejects(fs.stat(launcherPath));
+});
+
+test('the launcher file also disappears by itself after its short lifetime, and a stale one is removed at start and on close', async () => {
+  const dir = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'kr-launch-'));
+  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
+  const launcherPath = path.join(dir, '0123456789abcdef.open.html');
+  await fs.writeFile(launcherPath, 'stale');
+  const { request, write, instance } = await boot({ launcherPath, launcherTtlMs: 200 });
+  await assert.rejects(fs.stat(launcherPath), 'a stale launcher from an earlier run is removed at start');
+  await mint(request, write);
+  await fs.writeFile(launcherPath, 'fresh');
+  await new Promise((r) => setTimeout(r, 400));
+  await assert.rejects(fs.stat(launcherPath), 'removed after its lifetime even if never used');
+  await fs.writeFile(launcherPath, 'again');
+  await instance.close();
+  await assert.rejects(fs.stat(launcherPath), 'and on close');
 });

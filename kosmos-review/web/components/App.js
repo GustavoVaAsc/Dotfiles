@@ -25,6 +25,7 @@ export function App({ api, markdown, heartbeatMs = 60_000 }) {
   const [server, setServer] = useState(null);
   const [review, dispatch] = useReducer(reducer, initialState);
   const [reopened, setReopened] = useState(false);
+  const [delivered, setDelivered] = useState(null); // did a listening agent exist when this session submitted? null = unknown
   const [saveState, setSaveState] = useState('idle');
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -37,6 +38,7 @@ export function App({ api, markdown, heartbeatMs = 60_000 }) {
     const parsed = markdown.parse(state.doc.text);
     setServer({ ...state, parsed });
     setReopened(false);
+    setDelivered(null);
     dispatch({
       type: 'restore',
       comments: state.draft?.comments ?? [],
@@ -115,8 +117,9 @@ export function App({ api, markdown, heartbeatMs = 60_000 }) {
     setNotice(null);
     try {
       await saver.flush(); // the last edits reach draft.json first, so a refused submit loses nothing
-      await api.submit(buildReview(review, parsed.questions, doc.hash));
+      const result = await api.submit(buildReview(review, parsed.questions, doc.hash));
       applyState(await api.getState());
+      setDelivered(Boolean(result.listener?.active)); // read by the server before the round existed, so the waiter's exit cannot hide it
     } catch (err) {
       setNotice(err.status === 409
         ? { tone: 'warn', text: err.message, reload: true }
@@ -157,7 +160,11 @@ export function App({ api, markdown, heartbeatMs = 60_000 }) {
       <${Header} slug=${server.slug} round=${locked ? lastRound?.round : server.round} status=${locked ? 'submitted' : 'open'} saveState=${saveState} theme=${theme} onToggleTheme=${toggleTheme} />
       ${notice && html`<${Notice} tone=${notice.tone} action=${notice.reload ? reloadButton : null}>${notice.text}<//>`}
       ${locked && html`<${Notice} tone="success" action=${html`<span class="notice-actions">${reloadButton}<button type="button" class="small" onClick=${() => setReopened(true)}>Start another round on this version</button></span>`}>
-        Round ${lastRound?.round} submitted to ${lastRound?.file}. Tell the agent "review submitted"; when it has updated the document, reload.
+        ${delivered === true
+          ? `Round ${lastRound?.round} sent to the agent (${lastRound?.file}). It should be picked up automatically; if the agent does not respond, tell it "review submitted". Reload once it has updated the document.`
+          : delivered === false
+            ? `Round ${lastRound?.round} submitted to ${lastRound?.file}. Tell the agent "review submitted"; when it has updated the document, reload.`
+            : `Round ${lastRound?.round} submitted to ${lastRound?.file}. If the agent does not respond on its own, tell it "review submitted"; when it has updated the document, reload.`}
       <//>`}
       ${draftStale && !locked && html`<${Notice} tone="warn">This draft was started on an earlier version of the document. Comments marked "earlier version" may point at the wrong lines.<//>`}
       ${parsed.issues.length > 0 && html`<${Notice} tone="warn">${parsed.issues.length} problem(s) in the question blocks of this document. Details are shown in place; ask the agent to fix them.<//>`}

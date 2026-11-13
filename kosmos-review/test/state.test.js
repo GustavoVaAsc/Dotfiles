@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { reducer, initialState } from '../web/state/reducer.js';
 import { buildReview, restoreAnswers, answeredCount, isAnswered } from '../web/state/payload.js';
 import { createAutosaver } from '../web/state/autosave.js';
-import { initSession } from '../web/net/session.js';
+import { initSession, takeTicket, exchangeTicket } from '../web/net/session.js';
 
 const HASH = 'sha256:' + 'b'.repeat(64);
 const NOW = '2026-01-02T03:04:05.000Z';
@@ -207,4 +207,33 @@ test('reducer: an answer patch may be a function of the previous answer, so two 
   let s = reducer(initialState, { type: 'setAnswer', id: 'q2', patch: toggle(0) });
   s = reducer(s, { type: 'setAnswer', id: 'q2', patch: toggle(2) });
   assert.deepEqual(s.answers.q2.selected, [0, 2]);
+});
+
+// ---- fix round 1 (ticket bootstrap) ----
+
+test('takeTicket reads #ticket=, removes it from the address bar at once, and ignores malformed values', () => {
+  const calls = [];
+  const history = { replaceState: (...a) => calls.push(a) };
+  assert.equal(takeTicket({ location: { hash: '#ticket=abcDEF123_-abcDEF123_-abcDEF123', pathname: '/', search: '' }, history }), 'abcDEF123_-abcDEF123_-abcDEF123');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][2], '/');
+  assert.equal(takeTicket({ location: { hash: '#ticket=<script>', pathname: '/', search: '' }, history }), null);
+  assert.equal(takeTicket({ location: { hash: '#token=abcDEF123_-', pathname: '/', search: '' }, history }), null);
+  assert.equal(takeTicket({ location: { hash: '', pathname: '/', search: '' }, history }), null);
+});
+
+test('exchangeTicket posts the ticket as JSON, stores the token for reloads, and returns null on any failure', async () => {
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const seen = [];
+  const ok = async (url, init) => { seen.push([url, init]); return { ok: true, json: async () => ({ token: 'tok_abcdef123456' }) }; };
+  assert.equal(await exchangeTicket('t'.repeat(40), { fetch: ok, storage }), 'tok_abcdef123456');
+  assert.equal(seen[0][0], '/api/session');
+  assert.equal(seen[0][1].method, 'POST');
+  assert.equal(seen[0][1].headers['content-type'], 'application/json');
+  assert.equal(JSON.parse(seen[0][1].body).ticket, 't'.repeat(40));
+  assert.equal(store.get('kosmos-review-token'), 'tok_abcdef123456');
+  assert.equal(await exchangeTicket('x', { fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }), storage }), null);
+  assert.equal(await exchangeTicket('x', { fetch: async () => { throw new Error('down'); }, storage }), null);
+  assert.equal(await exchangeTicket('x', { fetch: async () => ({ ok: true, json: async () => ({ token: '<bad>' }) }), storage }), null);
 });

@@ -7,6 +7,9 @@
 //   GET  /api/state        document, draft, meta, rounds                        (token)
 //   PUT  /api/draft        autosave comments and answers                        (token)
 //   POST /api/submit       write the next round-N.json and clear the draft      (token)
+//   POST /api/ticket       mint a single-use bootstrap ticket                   (token)
+//   POST /api/session      redeem a ticket once for the token (the ticket is the credential)
+//   POST /api/listener     a waiting agent's heartbeat (lease) or stop; tells the page its review will be picked up
 //   POST /api/keep         answer the "keep this review in the repo?" question  (token)
 //   GET  /assets/<path>    files under <review folder>/assets/                  (token)
 //
@@ -109,9 +112,9 @@ async function readJsonBody(req) {
   }
 }
 
-export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs = 0, onIdle, webDir, vendorDir }) {
+export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs = 0, onIdle, webDir, vendorDir, listenerLeaseMs = 30_000, ticketTtlMs = 60_000, roundKey = null, launcherPath = null, launcherTtlMs = 45_000 }) {
   const relReviewDir = `docs/reviews/${slug}`;
-  const store = createStore({ reviewDir, projectRoot, slug, relReviewDir });
+  const store = createStore({ reviewDir, projectRoot, slug, relReviewDir, roundKey });
   const id = idFor(reviewDir);
   const keepLock = createMutex();
   let guard;
@@ -124,6 +127,33 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => onIdle?.(), idleMs);
   };
+
+  // Agents waiting for a submitted round (kosmos-review wait). In memory only: a lease that the waiter renews with
+  // an authenticated heartbeat, so a waiter that dies simply expires. Nothing here comes from the document.
+  const listeners = new Map(); // id -> { expires (ms since epoch), pid }
+  const MAX_LISTENERS = 16;
+  const pidAlive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      return err.code === 'EPERM';
+    }
+  };
+  // A lease also dies with its waiter: a killed `wait` must not keep the page claiming "sent to the agent".
+  const listenerStatus = () => {
+    const now = Date.now();
+    for (const [lid, l] of listeners) if (l.expires <= now || (l.pid !== undefined && !pidAlive(l.pid))) listeners.delete(lid);
+    return { active: listeners.size > 0, count: listeners.size };
+  };
+  // Single-use bootstrap tickets: the browser is started with one of these instead of the token, because a
+  // command line is readable by other local users. Minted with the token, redeemed once for the token.
+  const tickets = new Map(); // ticket -> expiry
+  const MAX_TICKETS = 8;
+  // The launcher page that carries a ticket to the browser (see launcher.js) is deleted when a ticket is used, a short
+  // time after each mint even if it never is, at start (a stale one) and on close.
+  const launcherTimers = new Set();
+  const dropLauncher = () => (launcherPath ? fs.rm(launcherPath, { force: true }).catch(() => {}) : Promise.resolve());
 
   function send(res, status, body, headers = {}) {
     const payload = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -193,6 +223,8 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
   const apiRoutes = {
     '/api/ping': { method: 'GET', handler: (req, res) => send(res, 200, { ok: true }) },
     '/api/state': { method: 'GET', handler: handleState },
+    '/api/listener': { method: 'POST', write: true, handler: handleListener },
+    '/api/ticket': { method: 'POST', write: true, handler: handleTicket },
     '/api/draft': { method: 'PUT', write: true, handler: handleDraft },
     '/api/submit': { method: 'POST', write: true, handler: handleSubmit },
     '/api/keep': { method: 'POST', write: true, handler: handleKeep },
@@ -213,6 +245,7 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
       status: !draft && last && last.docHash === doc.hash ? 'submitted' : 'open',
       git: { isRepo },
       needsKeepPrompt: isRepo && meta.keep === null,
+      listener: listenerStatus(),
     });
   }
 
@@ -227,7 +260,50 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
     if (review.docHash !== doc.hash) {
       throw new HttpError(409, 'the document changed since you opened it; reload the page (your draft is kept)', { currentHash: doc.hash });
     }
-    send(res, 200, { ok: true, ...(await store.submit(review)) });
+    // Whether someone is waiting is read before the round exists: the waiter unregisters the moment it sees the file.
+    const listener = listenerStatus();
+    send(res, 200, { ok: true, ...(await store.submit(review)), listener });
+  }
+
+  async function handleTicket(req, res) {
+    const now = Date.now();
+    for (const [t, expires] of tickets) if (expires <= now) tickets.delete(t);
+    if (tickets.size >= MAX_TICKETS) throw new HttpError(409, 'too many outstanding tickets');
+    const ticket = crypto.randomBytes(24).toString('base64url');
+    tickets.set(ticket, now + ticketTtlMs);
+    if (launcherPath) {
+      const timer = setTimeout(() => { launcherTimers.delete(timer); dropLauncher(); }, launcherTtlMs);
+      timer.unref();
+      launcherTimers.add(timer);
+    }
+    send(res, 200, { ticket });
+  }
+
+  /** The ticket is the credential here, so there is no bearer token; every other write guard still applies. */
+  async function handleSession(req, res) {
+    if (req.method !== 'POST') throw new HttpError(405, 'method not allowed', { allow: 'POST' });
+    const denied = guard.checkWrite(req);
+    if (denied) refuse(denied);
+    const body = await readJsonBody(req);
+    if (!body || typeof body !== 'object' || typeof body.ticket !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(body.ticket)) throw new HttpError(400, 'expected { ticket }');
+    const expires = tickets.get(body.ticket);
+    tickets.delete(body.ticket); // single use, whatever the outcome
+    if (!expires || expires <= Date.now()) throw new HttpError(401, 'invalid or expired ticket');
+    touch();
+    await dropLauncher(); // the ticket is spent, and so is the page that carries it
+    send(res, 200, { token });
+  }
+
+  async function handleListener(req, res) {
+    const body = await readJsonBody(req);
+    const valid = body && typeof body === 'object' && !Array.isArray(body) && typeof body.id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(body.id) && ['beat', 'stop'].includes(body.action);
+    if (!valid) throw new HttpError(400, 'expected { id: 8-64 letters/digits/_/-, action: "beat" | "stop" }');
+    listenerStatus(); // drop expired leases first
+    if (body.pid !== undefined && !(Number.isInteger(body.pid) && body.pid > 0 && body.pid <= 2 ** 31 - 1)) throw new HttpError(400, 'pid must be a positive integer');
+    if (body.action === 'stop') listeners.delete(body.id);
+    else if (listeners.has(body.id) || listeners.size < MAX_LISTENERS) listeners.set(body.id, { expires: Date.now() + listenerLeaseMs, pid: body.pid });
+    else throw new HttpError(409, 'too many listeners');
+    send(res, 200, { ok: true, ...listenerStatus() });
   }
 
   async function handleKeep(req, res) {
@@ -260,12 +336,15 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
       return send(res, 200, { app: 'kosmos-review', id, pid: process.pid });
     }
 
+    if (pathname === '/api/session') return handleSession(req, res);
+
     if (pathname.startsWith('/api/') || pathname.startsWith('/assets/')) {
       const denyRead = guard.checkRead(req) ?? guard.checkToken(req);
       if (denyRead) refuse(denyRead);
       // Only a request that proved it holds the token counts as activity. Rejected requests, /healthz and static
       // files do not: any web page can fire those blind at 127.0.0.1 and would otherwise keep the server alive forever.
-      touch();
+      // Listener heartbeats do not either: a waiting agent must not keep the server (and its token) alive by itself.
+      if (pathname !== '/api/listener') touch();
 
       if (pathname.startsWith('/assets/')) {
         if (req.method !== 'GET') throw new HttpError(405, 'method not allowed', { allow: 'GET' });
@@ -315,6 +394,7 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
     async start() {
       webRoot = await fs.realpath(webDir);
       vendorRoot = await fs.realpath(vendorDir);
+      await dropLauncher();
       await store.pin();
       await store.ensureMeta();
       await new Promise((resolve, reject) => {
@@ -331,6 +411,8 @@ export function createReviewServer({ reviewDir, projectRoot, slug, token, idleMs
     },
     async close() {
       clearTimeout(idleTimer);
+      launcherTimers.forEach(clearTimeout);
+      await dropLauncher();
       await new Promise((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections?.();

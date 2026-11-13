@@ -113,3 +113,35 @@ export function parseKeep(body) {
   if (!isObject(body) || typeof body.keep !== 'boolean') fail('keep must be true or false');
   return body.keep;
 }
+
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/**
+ * A round file as the review server writes it (round-N.json). Rebuilds it from known fields only, so whatever else
+ * a file carries, even a correctly signed one, is dropped. The MAC is not part of the result.
+ */
+export function parseRound(obj) {
+  if (!isObject(obj)) fail('a round must be a JSON object');
+  if (obj.schema !== 1) fail('schema must be 1');
+  if (!Number.isInteger(obj.round) || obj.round < 1 || obj.round > 1_000_000) fail('round must be a positive integer');
+  if (typeof obj.slug !== 'string' || !SLUG_RE.test(obj.slug)) fail('slug is invalid');
+  const docFile = str(obj.docFile, 'docFile', 300);
+  const submittedAt = str(obj.submittedAt, 'submittedAt', 40);
+  if (!Array.isArray(obj.answers)) fail('answers must be an array');
+  const flags = obj.answers.map((a) => {
+    if (!isObject(a) || typeof a.answered !== 'boolean') fail('every answer needs a boolean "answered"');
+    return a.answered;
+  });
+  const review = parseReview({ docHash: obj.docHash, overall: obj.overall ?? '', comments: obj.comments, answers: obj.answers.map(({ answered, ...rest }) => rest) });
+  return {
+    schema: 1,
+    round: obj.round,
+    slug: obj.slug,
+    docFile,
+    submittedAt,
+    docHash: review.docHash,
+    overall: review.overall,
+    comments: review.comments,
+    answers: review.answers.map((a, i) => ({ ...a, answered: flags[i] })),
+  };
+}

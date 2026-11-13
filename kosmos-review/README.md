@@ -4,9 +4,19 @@ A local browser page for reviewing a Markdown document an agent wrote. The revie
 questions embedded in it, leaves comments anchored to source lines, and submits. The submission is a JSON file in the
 repo; the agent reads that file, addresses every comment and answer, edits the document, and starts the next round.
 
-This is backlog item 16. Nothing pushes feedback into the agent session: the user types "review submitted" in chat and
-the agent reads the latest `round-N.json` (the `artifact-review` skill describes that loop). The agent never blocks
-waiting for a review.
+This is backlog item 16. The feedback channel is the `round-N.json` file. How it reaches the agent depends on the
+runtime (the `artifact-review` skill describes the loop):
+
+- **Claude Code and Pi: automatic.** The agent starts `kosmos-review wait` in the background (Claude Code's
+  `run_in_background`, or the `review_watch` tool of the Pi extension) and ends its turn; when the round is submitted the
+  session is woken with it. The page says "sent to the agent" when someone is listening.
+- **OpenCode and anything else: manual.** The user types "review submitted" in chat and the agent runs
+  `kosmos-review latest`.
+
+The agent never blocks waiting for a review.
+
+**TODO (OpenCode):** automatic delivery for OpenCode. It needs a plugin or hook that can start a turn from outside the
+session; until then OpenCode keeps the manual flow. (To be added to the backlog.)
 
 The folder is self-contained. Nothing outside it depends on its internals except the `artifact-review` skill, which
 only calls the CLI entry point `kosmos-review/kosmos-review`.
@@ -19,15 +29,20 @@ only calls the CLI entry point `kosmos-review/kosmos-review`.
 ~/Dotfiles/kosmos-review/kosmos-review serve <project-root> <slug>    # prints the URL and returns at once
 ```
 
-Open the printed `URL:` line in a browser. It looks like `http://127.0.0.1:43949/#token=...`; the token after `#` is
-what lets the page read and write the review, so open the whole URL.
+A fresh server is opened in your default browser for you (see "Auto-open"); the printed `URL:` line is always there
+too. It looks like `http://127.0.0.1:43949/#token=...`; the token after `#` is what lets the page read and write the
+review, so open the whole URL if you open it yourself.
 
 Requirements: Node 20.6 or newer. There is no install step and no build step.
 
 ## CLI
 
 ```
-kosmos-review serve  <project-root> <slug> [--idle-minutes N]   start (or reuse) the server, print the URL, return at once
+kosmos-review serve  <project-root> <slug> [--idle-minutes N] [--no-open]
+                                                                start (or reuse) the server, print the URL, return at once;
+                                                                a fresh server is opened in the browser unless --no-open
+kosmos-review wait   <project-root> <slug> [--timeout-minutes N] [--after N]
+                                                                block until a round is submitted; print its path and JSON
 kosmos-review check  <project-root> <slug>                      validate the kosmos-question fences in doc.md
 kosmos-review latest <project-root> <slug>                      print the absolute path of the newest round-N.json
 kosmos-review stop   <project-root> <slug>                      stop the server
@@ -57,6 +72,116 @@ with its token, so asking for the URL again resets the idle timer.
 The registry lives in `$KOSMOS_REVIEW_STATE_DIR`, else `$XDG_RUNTIME_DIR/kosmos-review`, else
 `<tmpdir>/kosmos-review-<uid>`; the directory is created private (`0700`), entries are `0600`, and nothing is written
 inside the repository for it. Each server's stderr goes to `<state dir>/<id>.log`.
+
+### Auto-open
+
+`serve` opens the page in the default browser only when it starts a fresh server, never when it reuses a running one
+(so a second `serve` does not add a tab). `--no-open` turns it off. On Linux it runs `/usr/bin/xdg-open`, and does
+nothing (silently) when neither `DISPLAY` nor `WAYLAND_DISPLAY` is set (SSH, headless); on macOS it runs `/usr/bin/open`
+(absolute paths, never looked up on `PATH`; a missing binary just means "not opened"). The opener is a detached child
+started with a single argument and no shell, and its failures are ignored.
+
+**The browser is never given the token, nor a ticket.** A browser's command line stays readable
+(`/proc/<pid>/cmdline`) by other local users for as long as it runs, and a one-time ticket in it could be redeemed for
+the token by any of them within its lifetime. So the opener is handed only the `file://` URL of a launcher page,
+`<state dir>/<id>.open.html` (mode 0600 in the private 0700 state directory, written by `serve` with `O_EXCL|O_NOFOLLOW`),
+which redirects (meta refresh, plus a plain link) to `http://127.0.0.1:<port>/#ticket=<random>`. The ticket is minted by
+the server (authenticated `POST /api/ticket`), single use, valid 60 s, at most 8 outstanding. The server deletes the
+launcher the moment a ticket is redeemed, 45 s after each mint even if it never is (long enough for a cold browser start, shorter than the 60 s ticket life), at start (a stale one) and on close.
+The page removes the ticket from the address bar at once and swaps it, once, for the real token with
+`POST /api/session` (the ticket is the credential there; the usual Host, Origin, `Sec-Fetch-Site` and JSON guards still
+apply; failed attempts are not activity). When that exchange fails the page says so plainly ("This link was already used
+or expired") and how to get a fresh one. The opener refuses any URL that is not exactly such a launcher path, so it can
+never be handed a token or a ticket, even by mistake. The URL printed for the agent stays the token URL: the agent's
+transcript already holds the token, and a single-use link would be useless for opening the review in another browser.
+The output says `Browser: launch requested (xdg-open); if no review page appears, open the URL above` or
+`Browser: not opened (<reason>)`. It says "launch requested" rather than "opened" because it cannot see the result: a
+sandboxed browser (snap or flatpak Firefox, the Ubuntu default) often cannot read a `file://` page in the runtime
+directory, and the CLI is not told. The skill therefore always gives the user the URL as well. The opener is told the
+exact `file://` URL to expect (`pathToFileURL(<state dir>/<id>.open.html)`, computed by the CLI) and refuses anything
+that differs, instead of matching a character pattern, so state paths containing `@ = , ( )` or non-ASCII work.
+`serve --foreground` (debugging) does not open anything.
+
+### `wait`: getting the submitted round to the agent
+
+`kosmos-review wait <project-root> <slug> [--timeout-minutes N] [--after N]` blocks until a round is submitted, then
+prints `Round file: <absolute path>` followed by the round's JSON and exits 0. Only regular files named `round-N.json`
+count. By default only rounds newer than the newest one at start count; with `--after N` the first round greater than
+`N` is delivered, even if it was submitted before `wait` started (the skill passes the number of the last round the
+agent handled, and the Pi extension tracks it), one round at a time, lowest first. The timeout never exceeds the running
+server's idle timeout (120 minutes without a server); a larger `--timeout-minutes` is capped to it, so a wait cannot
+outlive the review it serves. Exit codes: `3` timed out, `4` another `wait` for the same review is already running
+(a lock file with the waiter's pid; a dead owner's, or one older than any possible wait, is taken over), `5` the file
+is not an authentic round (see below), `2` bad usage, `143` terminated. It wakes on `fs.watch` events and also polls
+every 2 s, so a missing or failing watcher only costs latency, and it sleeps between wake-ups (it never spins). It
+watches files, not the server, so it keeps working if the server idles out or is stopped.
+
+**It cannot be orphaned.** `wait` exits (143, after unregistering) when its parent process dies, checked once a second,
+and with `--watch-stdin` when its stdin pipe closes; the Pi extension uses both. `--ignore-parent` turns the parent
+check off for a harness that daemonizes its commands.
+
+**Rounds are authenticated.** `serve` creates a random 256-bit key per review at
+`$XDG_STATE_HOME/kosmos-review/<id>.key` (default `~/.local/state/kosmos-review/<id>.key`; the directory 0700 and
+owner-checked, the file 0600; never in the repository), where `<id>` is the first 16 hex digits of the SHA-256 of the
+review folder's real path. It deliberately lives in the state home, not in the runtime directory that holds the
+registry, so rounds the server wrote stay verifiable after logout. (`KOSMOS_REVIEW_STATE_DIR`, used by the tests,
+keeps the key next to the registry instead.) The server adds
+`"mac": "hmac-sha256:<hex>"` to every `round-N.json` it writes: an HMAC-SHA256 over the canonical (sorted-key) JSON of the
+round without the `mac`. `wait` and `latest` open the file without following symlinks, refuse non-regular or oversized
+(> 4 MiB) files, parse it, verify the MAC, check it against a strict round schema, require that the round number inside equals the one in the file name and that the
+slug is this review's (so a genuine round copied to `round-9.json` is not a new submission), and rebuild it from known
+fields. What
+`wait` prints is that rebuilt round, without the `mac`, with `<` and `>` written as `\u003c` and `\u003e` (it decodes to
+the same text, and no tag can be closed from inside it). If any step fails (a plain-text file, valid-looking JSON with no
+or a wrong MAC, a missing key) it prints only `Round file: <path>`, a `Round number: N` line (so the agent can re-arm with `--after N` past a file it
+must not read) and an `UNVERIFIED: ... NOT written by the review server ... ask the user before reading` line, no
+content, and exits 5; `latest` prints the path and the same warning on
+stderr and exits 5. I chose an HMAC over a server-side ledger of round hashes because it needs no state beyond one key
+file, works across server restarts, and verifies a file without asking the server (which may be stopped). The key
+lives in the same trust domain as the user's own processes, so this stops files that arrive through the repository (a
+pull or checkout), other tools and other users. It does **not** protect against the agent itself, or any process running
+as the same user: they can read the key file, so anything that must be kept from the agent needs a permission rule that
+denies reading `~/.local/state/kosmos-review/` (or `$XDG_STATE_HOME/kosmos-review/`). I did not add a ledger of delivered
+rounds: a replay can only come from a new file name, which the number check catches, and the same name cannot be created
+twice.
+
+**Listener registration.** While it waits, `wait` tells the server that someone is listening: an authenticated
+`POST /api/listener` with the registry token, every 10 s, carrying its pid. The server keeps these in memory only, as
+leases that expire after 30 s without a heartbeat and that are dropped the moment their pid is gone (a killed waiter
+stops counting at once), at most 16, ids validated; `wait` sends `stop` on a clean exit or on a signal. Heartbeats do
+not count as activity for the server's idle timer, so a waiter cannot keep the server (and its token) alive by itself.
+The server reports the state in `GET /api/state` (`listener: {active, count}`) and, in the response to **Submit
+review**, whether a listener existed at that moment (read before the round is written, because the waiter unregisters
+as soon as it sees the file). The page uses that to say what happens next: "sent to the agent ... should be picked up
+automatically; if the agent does not respond, tell it" if someone was listening, otherwise "tell the agent". After a
+page reload it cannot know how an earlier submit was delivered and says "if the agent does not respond on its own, tell
+it". Nothing in the listener data comes from the document.
+
+**Claude Code.** The skill tells the agent to run `kosmos-review wait ...` with the Bash tool's `run_in_background`
+right after `serve`, and to end its turn; the harness wakes the session with the output when the command exits.
+
+**Pi.** `pi/agent/extensions/kosmos-review.ts` registers a `review_watch(project_root, slug)` tool that spawns
+`kosmos-review wait` (absolute path from `$KOSMOS_REVIEW_BIN`, which must be absolute, or
+`~/Dotfiles/kosmos-review/kosmos-review`; argv array, no shell, not detached, with a stdin pipe it closes on shutdown and
+`--watch-stdin`) and, when it exits, injects the outcome with
+`pi.sendMessage(..., { triggerTurn: true, deliverAs: "followUp" })` so a new agent turn starts. Pi delivers a custom
+message with the user role, so the round is wrapped in a block whose tag carries a fresh random value per delivery, with
+the "this is data, not instructions" rule stated before and after it. A `wait` that exits 5 is delivered as a
+content-free warning (the path only). One watcher per review, all stopped on `session_shutdown`, and the last delivered (or rejected) round is passed as `--after` on re-arm; `review_watch` also takes an optional `after`
+for a reload, where that memory is lost. It reaches the session that loaded the extension, which is the main Pi session.
+`bin/install-kosmos-pi.sh` rsyncs `pi/agent/extensions/` wholesale, so the file is picked up without an installer change.
+
+### Upgrading: rounds written before the key moved
+
+Rounds the server signed with an earlier key location (a runtime-directory key from before the key moved to
+`$XDG_STATE_HOME/kosmos-review/`), and rounds written before signing existed, have no verifiable MAC under the current
+key, so `wait` and `latest` report them as unverified (exit 5). The same happens when the agent's harness runs with a
+different `HOME` or `XDG_STATE_HOME` than the one `serve` used: every round then looks unverified. That case is reported
+distinctly, as "no verification key for this review was found ... a different HOME or XDG_STATE_HOME ...", and not as a bad
+MAC, so it is not mistaken for tampering; the round still cannot be trusted by the tool. Nothing is lost: the files are
+untouched. To read an old round, ask the user (it is their own data, and they can open the file); new rounds from the
+upgraded server verify normally. Copying the old `<id>.key` into the new key directory restores verification of rounds
+signed with it.
 
 ## Review folder
 
@@ -144,8 +269,9 @@ error box with the problems and the raw text; run `kosmos-review check` to get t
 - **Answer:** click options or type; answers and comments autosave to `draft.json` about 0.7 s after each change and
   when the tab is hidden. Reloading the page restores the draft.
 - **Submit review:** first saves any pending draft edits, then writes `round-N.json` and clears the draft. The page then
-  shows one banner ("Round N submitted to <file>. Tell the agent \"review submitted\"") and a summary of what was
-  submitted, and is read-only.
+  shows one banner and a summary of what was submitted, and is read-only. The banner says "Round N sent to the agent"
+  when a waiting agent was registered at that moment, "Tell the agent \"review submitted\"" when none was, and, after a
+  reload, "if the agent does not respond on its own, tell it".
   After the agent updates `doc.md`, **Reload document** opens the next round. **Start another round on this version**
   re-opens the same document without waiting for an agent edit.
 - If `doc.md` changed after the page loaded, submit is refused with a reload prompt (the draft is kept). Comments made
@@ -196,6 +322,7 @@ Written by the server on submit; the agent reads it. The server rebuilds it from
 | `comments[].docHash` | The document version the comment was made against. Differs from `docHash` if the reviewer reloaded after an edit. |
 | `answers[]` | One entry per question in the document, answered or not. `selected` has option `index` (0-based) and `label`; `other` is the free-text field; `text` is the answer to a `text` question; `answered` is computed by the server. |
 | `overall` | Optional note not tied to a line. |
+| `mac` | The review server's signature over the rest of the round (see "Rounds are authenticated"). `wait` removes it from what it prints; ignore it if you read the file. |
 
 An empty round (no comments, nothing answered, empty `overall`) means the reviewer approved the document as it is.
 
@@ -216,6 +343,12 @@ work in progress, not a submission.
 | Request abuse | Bodies capped at 512 KiB (413 beyond that), 30 s request timeout, strict schema validation that rebuilds the object from known fields (limits on counts, lengths, ids, hashes), atomic writes (temp file in the same folder, fsync, rename). |
 | Rendering untrusted Markdown | markdown-it with `html: false`; its link validation refuses `javascript:`, `vbscript:`, `data:` links; images never get a `src` from the document (only `assets/` paths, fetched with the token and shown from `blob:` URLs); relative links lose their `href`; comments and answers are rendered as text. Mermaid runs with `securityLevel: 'strict'`. |
 | Defense in depth | CSP on the shell: `default-src 'none'`, scripts from `'self'` plus a per-response nonce (for the import map), no `unsafe-eval`, no remote images, `connect-src 'self'`, `frame-ancestors 'none'`. |
+| Process spawn | `serve` may start the system opener (`/usr/bin/xdg-open` / `/usr/bin/open`, absolute, never via `PATH`) detached, with `stdio: 'ignore'`, no shell, and the URL as its only argument; only the `file://` URL of the launcher page `<state dir>/<16 hex>.open.html` is accepted (anything else, including a token or ticket URL or strings that look like options, is refused), a missing display or binary skips it, and spawn failures are ignored. The browser's command line therefore never holds the token or a ticket. The Pi extension spawns `kosmos-review wait` by an absolute path (`KOSMOS_REVIEW_BIN` must be absolute) with an argv array and no shell, and the slug is validated, the project root must be absolute and contain `doc.md`. |
+| Launcher file | `<state dir>/<id>.open.html` holds the one-time ticket URL: 0600 in the 0700 owner-checked state directory, created with `O_EXCL|O_NOFOLLOW` after removing whatever was at the name, only ever containing our own loopback ticket URL (validated), deleted on redemption, after 30 s, at start and on close. |
+| Bootstrap tickets | `POST /api/ticket` needs the token; `POST /api/session` is authenticated by the ticket alone (192 random bits, single use, deleted on any attempt, 60 s lifetime, 8 outstanding at most) plus the Host, `Origin`, `Sec-Fetch-Site` and JSON-content-type guards; a failed attempt is not activity. A ticket is not accepted as a bearer token. |
+| Authentic rounds | A round file in the repository is untrusted input. The server signs the rounds it writes with an HMAC key kept outside the repository, and `wait`/`latest` print nothing of a file that fails the MAC check, the strict schema, or the safe-open checks (`O_NOFOLLOW`, regular file, size cap). Printed JSON has `<` and `>` escaped. See "Rounds are authenticated" for what this does and does not stop. |
+| Listener endpoint | `POST /api/listener` is a write route: token, JSON content type, `Origin` and `Sec-Fetch-Site` checks like every other write, strict body (`id` 8-64 chars of `[A-Za-z0-9_-]`, `action` `beat` or `stop`), at most 16 listeners, a validated pid, in-memory leases that expire after 30 s and die with their pid, and it is not activity for the idle timer (a waiter cannot keep the server alive). It changes nothing on disk and exposes only a boolean and a count. |
+| `wait` output and the Pi message | The round JSON contains text the reviewer wrote and text copied from the document (`quote`, `prompt`, `label`), so it is untrusted input to the agent. Both the skill and the Pi extension frame it as data to act on by editing `doc.md`, never as instructions (no shell commands, installs, fetches or edits outside the review folder); the Pi extension puts that framing before the data and keeps the data in one `<review-round>` block, and does not paste rounds over 100 KB. `wait` itself only reads one regular file of at most 4 MiB from the review folder. |
 | Token at rest | Only in the `0600` registry entry in the private state directory and in the URL handed to the user; never in the repo or in the server log. The URL is printed by `serve`, so it also lands in the agent's transcript and tool output: treat that transcript as holding a (loopback-only, short-lived) credential for the review. Restarting the server issues a new token. |
 
 Known limits:
@@ -254,7 +387,7 @@ badge; that is the hook step 2 builds on.
 kosmos-review/
   kosmos-review         CLI entry point (executable, node)
   src/                  server and CLI (Node standard library only)
-    cli.js server.js store.js paths.js security.js validate.js git-exclude.js registry.js mutex.js
+    cli.js server.js store.js paths.js security.js validate.js git-exclude.js registry.js mutex.js opener.js wait.js
   web/                  the page: native ES modules, Preact + htm, no build step
     index.html theme-init.js app.js
     components/         App, Header, Document, MarkdownChunk, Question, ReviewPanel, CommentComposer, CommentList, KeepPrompt
@@ -317,7 +450,9 @@ for a symlink while the server runs, draft save/restore, the `.git/info/exclude`
 serialised under concurrency, the forged `commondir` attack, real `git worktree`, hostile metadata files such as FIFOs and
 sparse oversized files, symlink refusal, and a check with real `git` when it is installed), the question-fence parser (valid, malformed, strict), the Markdown pipeline (anchors, escaping, links,
 images), the reducer/payload/autosave logic, the CLI end to end (detach, reuse, stop including SIGKILL escalation, stale
-entry and stale lock, idle exit), every file the page loads, and the whole component tree against a minimal fake DOM
+entry and stale lock, idle exit, `wait`: blocking, timeout, one per review, surviving a server stop, listener
+registration), the opener with an injected spawn (nothing launches a browser in the tests), the listener endpoint, the
+Pi extension against a fake `pi` and a stub binary (`test/pi-extension.test.js`, skipped when Pi is not installed), every file the page loads, and the whole component tree against a minimal fake DOM
 (`test/fake-dom.js`).
 
 What the automated tests cannot cover is a real browser. That was checked once by hand-driving headless Chrome (layout,
