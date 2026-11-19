@@ -1,0 +1,2 @@
+# Pinned empty osv-scanner config used by bin/kosmos-osv-scan.
+# It replaces the repository's own osv-scanner.toml, whose ignore lists can hide vulnerabilities.

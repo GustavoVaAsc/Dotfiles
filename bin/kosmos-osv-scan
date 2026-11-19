@@ -1,0 +1,134 @@
+#!/usr/bin/env -S python3 -I
+"""kosmos-osv-scan: scan ONE lockfile with osv-scanner, in a form that cannot be steered.
+
+Usage: kosmos-osv-scan <lockfile>
+
+This is the only scanner the kosmos security auditor may run without approval.
+It takes exactly one argument and refuses everything else, so a prompt, a repo
+file or a model mistake cannot add flags, other paths or other commands:
+
+- the path must resolve (symlinks followed) to a regular file inside the
+  current git repository. Outside git it refuses. The repository root is the
+  nearest ancestor holding `.git`, and it must equal what `git rev-parse
+  --show-toplevel` reports, so a hostile `.git/config` (core.worktree) cannot
+  widen it;
+- the file name must be on LOCKFILES, formats osv-scanner reads statically
+  from the file itself. Formats it resolves transitively, over the network or
+  by running a tool are NOT listed: requirements.txt, pom.xml, build.gradle,
+  go.mod, go.sum (and any format whose behavior is not known to be static).
+  Scan those with the package-manager route, with approval;
+- osv-scanner is started with a fixed argv, without a shell: call analysis
+  off, a pinned empty config (so the repo's own osv-scanner.toml, which can
+  hide vulnerabilities, is not applied), no output file, stdout only, an
+  explicit parse-as type taken from the file name, and the absolute path.
+
+osv-scanner is not installed by this script, and must not be.
+"""
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+
+# parse-as type osv-scanner is told to use, keyed by the exact file name.
+LOCKFILES = {
+    "package-lock.json": "package-lock.json",
+    "npm-shrinkwrap.json": "package-lock.json",
+    "pnpm-lock.yaml": "pnpm-lock.yaml",
+    "yarn.lock": "yarn.lock",
+    "Cargo.lock": "Cargo.lock",
+    "poetry.lock": "poetry.lock",
+    "Pipfile.lock": "Pipfile.lock",
+    "uv.lock": "uv.lock",
+    "composer.lock": "composer.lock",
+    "Gemfile.lock": "Gemfile.lock",
+}
+
+# [unverified] osv-scanner v2 flags, written from memory (not installed here,
+# no offline docs). If a flag name is wrong, fix it HERE and nowhere else.
+OSV_COMMAND = ["osv-scanner", "scan", "source"]
+OSV_FIXED_FLAGS = ["--no-call-analysis=all"]  # call analysis off for every ecosystem
+OSV_CONFIG_FLAG = "--config={config}"  # the pinned empty config
+OSV_LOCKFILE_FLAG = ["-L", "{parse_as}:{path}"]  # explicit parse-as type + absolute path
+
+EMPTY_CONFIG = pathlib.Path(__file__).resolve().parent / "kosmos-osv-config.toml"
+
+USAGE = "usage: kosmos-osv-scan <lockfile>   (exactly one path to a lockfile inside this repository)"
+
+
+def fail(message, code=2):
+    print(f"kosmos-osv-scan: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def find_git_root(start):
+    """Nearest ancestor of `start` holding a `.git` entry. Reads no git config, so a hostile one cannot move it."""
+    path = start
+    while True:
+        if os.path.lexists(os.path.join(path, ".git")):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+
+
+def repo_root():
+    """The repository root (realpath). Refuses outside a git repo, and when git disagrees with the directory walk."""
+    walked = find_git_root(os.path.realpath(os.getcwd()))
+    if walked is None:
+        fail("not inside a git repository; refusing to scan (no fallback to the current directory)")
+    try:
+        out = subprocess.run(
+            ["git", "--no-pager", "-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null", "-c", "core.worktree=",
+             "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        fail(f"cannot ask git for the repository root: {error}")
+    reported = os.path.realpath(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+    # A hostile .git/config (core.worktree) can make git report / or $HOME as the toplevel; the walk above does not read it.
+    if reported != walked:
+        fail(f"git reports {reported!r} as the repository root but the nearest .git is in {walked}; refusing")
+    return walked
+
+
+def validate(argument):
+    """Return (absolute realpath, parse-as type) or exit with the reason."""
+    if not argument or argument.startswith("-"):
+        fail(f"refusing a flag-like or empty argument\n{USAGE}")
+    if any(ord(c) < 32 or ord(c) == 127 for c in argument):
+        fail("refusing an argument with control characters")
+    if ":" in argument:
+        fail("refusing an argument containing ':' (no parse-as prefixes)")
+    resolved = os.path.realpath(argument)
+    root = repo_root()
+    if os.path.commonpath([root, resolved]) != root:
+        fail(f"{argument} resolves outside the repository ({root})")
+    if not os.path.isfile(resolved):
+        fail(f"{argument} is not a regular file")
+    name = os.path.basename(resolved)
+    if name not in LOCKFILES:
+        fail(f"{name} is not on the lockfile allowlist: {', '.join(sorted(LOCKFILES))}. "
+             "Other formats need the package-manager route, with approval")
+    return resolved, LOCKFILES[name]
+
+
+def main(argv):
+    if len(argv) != 2:
+        fail(USAGE)
+    path, parse_as = validate(argv[1])
+    if not EMPTY_CONFIG.is_file():
+        fail(f"pinned config {EMPTY_CONFIG} is missing", 1)
+    if shutil.which("osv-scanner") is None:
+        fail("osv-scanner is not installed. Do not install it; report this under [approval].", 127)
+    command = (
+        OSV_COMMAND + OSV_FIXED_FLAGS
+        + [OSV_CONFIG_FLAG.format(config=EMPTY_CONFIG)]
+        + [part.format(parse_as=parse_as, path=path) for part in OSV_LOCKFILE_FLAG]
+    )
+    os.execvp(command[0], command)  # no shell; the process becomes osv-scanner
+
+
+if __name__ == "__main__":
+    main(sys.argv)
