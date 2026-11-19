@@ -17,14 +17,19 @@
 #      entry that points at the kosmos-pi package (path ends with `kosmos-pi`,
 #      with or without a trailing slash) and appends exactly one `file:$PKG_DIR`
 #      entry. Other package entries are left untouched and in their original order.
-#   5. Reads the (now current) `packages` array and, for entries of the form
-#      `npm:<spec>` that carry an explicit version (e.g. `npm:pi-subagents@0.79.1`,
+#   5. Runs bin/check_kosmos_tools.py: every tool a kosmos-pi agent names must
+#      be a Pi builtin, a pi-subagents runtime tool, or provided by an
+#      extension the agent loads (`extensions`, or `subagents.agentOverrides`
+#      for builtins). Exits non-zero before the npm install when one is
+#      missing, and runs again after it to scan the installed builtins.
+#   6. Reads the (now current) `packages` array and, for entries of the form
+#      `npm:<spec>` that carry an explicit version (e.g. `npm:pi-subagents@0.89.1`,
 #      `npm:@scope/pkg@1.2.3`), runs `npm install --save-exact <spec>` inside
 #      ~/.pi/agent/npm/. Unpinned `npm:` entries (e.g. `npm:pi-mcp-adapter`,
 #      `npm:@juicesharp/rpiv-todo`) are deliberately skipped — those are left
 #      to Pi's own package reconciliation, so this script never silently
 #      upgrades an unpinned package.
-#   6. Reports what changed. Exits non-zero on real failures.
+#   7. Reports what changed. Exits non-zero on real failures.
 #
 # Safe to re-run: `npm install` is a no-op when the package is already at the
 # same version; the settings normalisation leaves a single canonical `file:`
@@ -180,6 +185,17 @@ with settings_path.open("w") as f:
     f.write("\n")
 PY
 
+# --- check extension tools (before the pinned install) -----------------------
+# Run AFTER the sync and settings normalisation, BEFORE the pinned npm install.
+# `subagents.defaultExtensions: []` stops pi-subagents children from loading
+# ambient extensions, so an agent that names an extension-provided tool
+# (web_search, ...) fails at launch unless its `extensions` list loads the
+# provider. bin/check_kosmos_tools.py checks every kosmos-pi agent and the
+# builtin overrides, and exits non-zero (naming the agent, the tool and the
+# missing provider) so `set -e` stops the install here.
+
+python3 "$SCRIPT_DIR/check_kosmos_tools.py" "$SETTINGS" "$PKG_DIR/agents"
+
 # --- install pinned npm packages ----------------------------------------------
 # Run AFTER the settings normalisation so we read the canonical packages array.
 # For each `npm:<spec>` entry that carries an explicit version (the part after
@@ -224,6 +240,12 @@ else:
             sys.exit(1)
         print(f"  ✓ installed {spec}")
 PY
+
+# --- check extension tools (after the pinned install) ------------------------
+# Same check, now also scanning the builtin agents of the pi-subagents version
+# that was just installed and warning about extension paths that do not exist.
+
+python3 "$SCRIPT_DIR/check_kosmos_tools.py" "$SETTINGS" "$PKG_DIR/agents" --installed "$PI_NPM_DIR/node_modules/pi-subagents"
 
 # --- summary -------------------------------------------------------------------
 

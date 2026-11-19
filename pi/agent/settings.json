@@ -4,10 +4,11 @@
   "defaultProvider": "minimax",
   "defaultModel": "MiniMax-M3.1-Flash",
   "defaultThinkingLevel": "medium",
+  "hideThinkingBlock": true,
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
-    "npm:pi-subagents@0.79.1",
+    "npm:pi-subagents@0.89.1",
     "npm:@juicesharp/rpiv-todo",
     "npm:pi-ask-user"
   ],
@@ -16,6 +17,15 @@
   ],
   "subagents": {
     "defaultThinking": "medium",
-    "maxThinking": "high"
+    "maxThinking": "high",
+    "defaultExtensions": [],
+    "agentOverrides": {
+      "researcher": {
+        "extensions": ["~/.pi/agent/npm/node_modules/pi-web-access"]
+      },
+      "evidence-auditor": {
+        "extensions": ["~/.pi/agent/npm/node_modules/pi-web-access"]
+      }
+    }
   }
 }
