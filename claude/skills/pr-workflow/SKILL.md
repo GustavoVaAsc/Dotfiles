@@ -132,7 +132,10 @@ Surface the self-review report in this format:
 ready | needs-fix-first | needs-split
 
 ### Reviewer findings
-<aggregated kosmos-code-reviewer + kosmos-security-auditor output, severity-ordered>
+<aggregated kosmos-code-reviewer + kosmos-security-auditor findings, severity-ordered, with the IDs the agents gave them (R1, S2; a finding both raised reads R1+S2): a full block for blocker, critical and major, one line for minor and nit>
+
+### Open questions
+<the [decision] / [approval] / [unverified] entries from the reviewer and the auditor, or none>
 
 ### Checklist
 <completed items as checked; remaining items as unchecked with one-line note>

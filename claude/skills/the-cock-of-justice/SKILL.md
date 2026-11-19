@@ -38,7 +38,7 @@ Agent({ subagent_type: "kosmos-security-auditor", description: "Quality review",
 
 ### Preferred: kosmos-security-auditor (×2)
 
-This is the user's stated preference. The security-auditor agent has the strictest read-only posture and the most disciplined report format; reuse it as the chassis even when the review is not security-focused. State the lens in each brief so it knows which one it is wearing.
+This is the user's stated preference. The security-auditor agent has no write access and the most disciplined report format; reuse it as the chassis even when the review is not security-focused. State the lens in each brief so it knows which one it is wearing.
 
 ### Fallback: Explore or general-purpose (×2)
 
@@ -82,30 +82,38 @@ Both reviewer briefs are launched together in the one reply, and each brief must
 - The severity scheme: `blocker | critical | major | minor | nit`.
 - The instruction to use the output format below.
 
+**Lens mode.** Tell each subagent that the report shape below overrides its own agent's: number findings P1, P2, ... (spec lens) or Q1, Q2, ... (quality lens), not S; write no `Threat model:` line and no `## Prior findings` section; and use the spec or quality categories listed above, not the agent's own layers. The inner `Verdict:` line is informational only: the rubric below decides the verdict, not the subagents. The lenses do not run scanners or fetch the web, even though the chassis agent can: they work from the brief and the diff.
+
 Do not give either subagent context that depends on the other — they cannot share state.
 
 Label the two calls (`Spec review`, `Quality review`) so the two reports are told apart when they return.
 
 ### Subagent output format
 
-Each subagent must return a report in exactly this shape (re-using the kosmos-* report shape so synthesis is mechanical):
+Each subagent must return a report in exactly this shape (the kosmos-* report shape, so synthesis is mechanical). Tell the spec reviewer to number its findings P1, P2, ... and the quality reviewer to number its findings Q1, Q2, ..., so a merged finding reads `P1+Q2`:
 
 ```
 # <Spec | Quality> review: <scope>
+Verdict: ship | fix-first | block (<counts by severity, e.g. 1 major, 2 minor>)
 
 ## Summary
-<2-4 sentences: what was reviewed, overall assessment, severity counts>
+<1-2 sentences: what was reviewed and the overall assessment>
 
 ## Findings
-For each finding, ordered by severity (blocker first):
-- **[severity] file_path:line — title**
-  Category: <which of the spec / quality sub-categories above>
+- **P1 [major] file_path:line — title** (<which of the spec / quality sub-categories above>)
   What: <the defect in one sentence>
-  Why it matters: <concrete user or system impact>
-  Suggested fix: <specific change, not a vague hint>
+  Why: <concrete user or system impact>
+  Fix: <specific change, not a vague hint>
+- P2 [minor] file_path:line — <defect and impact in one line>. Fix: <specific change>
 
-Severity: blocker | critical | major | minor | nit
+## Not covered
+<what the reviewer did not examine, and why; `none` if everything was covered>
+
+## Open questions
+- [decision] | [approval] | [unverified] <entry, or `none`>
 ```
+
+Severity: blocker | critical | major | minor | nit. Blocker, critical and major get the full block, with severity and category on the title line; minor and nit get one line each.
 
 If a category has no findings, omit it. Do not pad the report.
 
@@ -113,8 +121,8 @@ If a category has no findings, omit it. Do not pad the report.
 
 After both subagents return:
 
-1. **Collect findings.** Keep the original severity, category, and citation from each subagent.
-2. **Deduplicate.** If both subagents flagged the same issue from different angles, merge into one finding and cite both lenses.
+1. **Collect findings.** Keep the original ID, severity, category, and citation from each subagent.
+2. **Deduplicate.** If both subagents flagged the same issue from different angles, merge into one finding, join the IDs (`P1+Q2`) and cite both lenses.
 3. **Apply the verdict rubric** below. This is the only place severity drives a verdict.
 4. **Write the output** in the exact format at the bottom of this skill.
 
@@ -136,31 +144,25 @@ Produce exactly this structure:
 
 ```
 # The Cock of Justice: <change scope>
-
-## Verdict
-ACCEPTED | WARNING | FAIL
+Verdict: ACCEPTED | WARNING | FAIL — <the headline reason in one sentence>
 
 ## Summary
-<2-4 sentences: what was reviewed, the two lenses, and the headline reason for the verdict.>
+<1-2 sentences: what was reviewed and the two lenses.>
 
 ## Concerns
 For each finding, ordered by severity (blocker first), then by file:
-- **[severity] file_path:line — title**
-  Source: spec | quality | both
-  Category: <sub-category>
-  What: <one sentence>
-  Why it matters: <one sentence>
-  Suggested fix: <one sentence>
+- **P1+Q2 [major] file_path:line — title** (source: spec, quality; <sub-category>)
+  What / Why / Fix: <one sentence each>
+- Q3 [minor] file_path:line — <one line>
 
-Severity: blocker | critical | major | minor | nit
-```
+## Not covered
+- <what either reviewer did not examine, and why, or none>
 
-After the concerns block, list anything either reviewer flagged that the spawning agent could not resolve:
-
-```
 ## Open questions
-- <things the reviewers could not determine from the artifact alone>
+- [decision] | [approval] | [unverified] <things the reviewers could not determine from the artifact alone, or none>
 ```
+
+Severity: blocker | critical | major | minor | nit. Blocker, critical and major get the full block; minor and nit get one line each. Findings keep the IDs the reviewers gave them (P for the spec lens, Q for the quality lens).
 
 Do not include a "ship verdict" or "fix-first / block" line — the verdict already encodes that. Do not add an emoji. Plain prose.
 

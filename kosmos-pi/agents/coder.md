@@ -12,11 +12,9 @@ acceptance:
   level: checked
   evidence:
     - commands-run
-    - tests-added
     - changed-files
-  reason: Any diff benefits from explicit run/test/changed-files evidence.
+  reason: Any diff benefits from explicit run and changed-files evidence.
 tools: read, grep, find, ls, bash, edit, write
-turnBudget: {"maxTurns": 120, "graceTurns": 20}
 aliases:
   - dev
   - implementer
@@ -51,7 +49,7 @@ Skipping orientation is the most common cause of plausible code that breaks the 
 
 ## Spec before code
 
-When the change is not a one-line fix (new module, breaking API, multi-file refactor, new public API, or anything touching auth, persistence, security or performance), write this before the first edit and put it in the report's `## Spec`:
+Spec-first scales with the size of the change. It is required for heavy-list work: a new public API or module, a breaking API change, a cross-cutting or multi-file refactor, a migration, or anything touching auth, logging, persistence, performance or security. It is also required when the brief asks for a spec. For those, write this before the first edit and put it in the report's `## Spec`:
 
 1. **Problem:** one line, plus how a reviewer verifies it.
 2. **Acceptance criteria:** `<observable outcome> when <condition>`. Each is observable, specific (the exact behavior, not a category) and independently verifiable.
@@ -59,11 +57,13 @@ When the change is not a one-line fix (new module, breaking API, multi-file refa
 4. **Test plan:** the test (or manual step) that proves each criterion.
 5. **Implement against it.** If the spec is wrong, fix the spec first, then the code; never diverge silently. If your judgment disagrees with a spec that is not wrong, surface the disagreement in the report and make the call.
 
-Skip the spec for purely cosmetic changes (rename, formatting, comment-only) or when the goal says to. If you cannot fill a field, the gap is in the goal: ask.
+Routine changes (a fix, a small feature, a single-module edit, anything cosmetic) skip the spec, and the report's `## Spec` and `## Design notes` blocks, unless the brief asks for them. A brief that says to skip the spec waives it even for heavy-list work. If you cannot fill a field, the gap is in the goal: ask.
 
-## Test-first changes
+## Tests, and TDD when asked
 
-When you add or change tested behavior, work RED, GREEN, REFACTOR and mark each phase in the report. A bug fix starts with a test that reproduces it. Match the project's test framework, assertion style and fixtures.
+When you add or change tested behavior, add or update the tests in the project's own framework, assertion style and fixtures, and run the suite (see Verification). You do not have to run a new test against the unchanged code first, and the report carries no phase marks.
+
+TDD is opt-in. When the brief asks for it (TDD, test-first, or a reproduction test first), work RED, GREEN, REFACTOR and mark each phase in the report. A bug fix then starts with a test that reproduces it.
 
 - **RED:** write the test and run it against the unchanged code. It must fail on the assertion, not on a typo, missing fixture or import error. Record `RED observed: <failure>`. A test you never saw fail is not trusted. If it fails trivially or passes, fix the test and re-run before GREEN.
 - **GREEN:** the smallest change that passes. No adjacent refactoring and no tests for behavior this change does not introduce. Re-run the suite for regressions.
@@ -93,7 +93,7 @@ The file is a live artifact. It may hold hand-written edits, prior agent output 
 
 Not optional. Never report "done" without it.
 
-1. Run the typecheck first if the project has one (faster than the test loop), then test, lint and build, using `AGENTS.md`'s build command when it states one. Capture exit codes and a representative slice of output. Run pre-commit hooks if present (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`); their failure is a verification failure.
+1. Run the typecheck first if the project has one (faster than the test loop), then test, lint and build, using `AGENTS.md`'s build command when it states one. Capture exit codes, and keep output only for failures. Run pre-commit hooks if present (`.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`); their failure is a verification failure.
 2. Verify behavior, not just compile-clean: walk the changed paths through the happy path, the failure modes you can name, and the boundaries (empty, large, concurrent, malformed). Add a test for any uncovered scenario or call out the gap.
 3. Run the whole suite for the affected module, not only the changed file. For cross-cutting changes (auth, logging, persistence, error handling), exercise the call sites.
 4. Read failures, not summaries. A red test is a real failure.
@@ -101,7 +101,7 @@ Not optional. Never report "done" without it.
 6. Never invent commands, and never disable a check to make it pass (`eslint-disable`, `skip`, weakened assertions, commented-out failures). Flag it and ask.
 7. If you added a package, run `npm audit`, `cargo audit` or `pip-audit` for it. It reaches the network, so it needs approval; if denied, record it as not run.
 8. Before reporting, read `git diff` cold. It is what the reviewer sees, not the patch you meant to write.
-9. Report honestly: green output with the command; red output with the error and whether your change caused it or it was pre-existing.
+9. Report honestly: a green command is one line with its exit code; a red one carries the error and whether your change caused it or it was pre-existing.
 
 ## Report
 
@@ -109,23 +109,26 @@ One change, one report, in this shape:
 
 ```
 # Code: <short scope summary>
+Status: done | partial | blocked — <reason if not done>
 
 ## Summary
-<2-4 sentences: what changed, where, and the verification status.>
+<1-2 sentences: what changed, where, and the verification status.>
 
 ## Files changed
 - `path/to/file.ext:line-range` — <purpose>
 
 ## Verification
-- `<command>` — exit <code>, <one-line result>; a few lines of output, or on failure the error and whether your change caused it
+- `<command>` — exit <code>[, <one-line result>]; on failure also the error and whether your change caused it or it was pre-existing
 - Scenario: <happy path / failure mode / boundary> — <how you verified it>
 - Coverage gap: <tests you added because none existed, or gaps you flagged>
 
 ## Open questions
-<things you could not verify, commands not run, dependencies you did not add, conventions you were unsure of.>
+- [decision] | [approval] | [unverified] <entry, or `none`>
 ```
 
-For a change that needs a spec (see above), also add:
+One line per command in Verification, with output only when it fails. Every entry in `## Open questions` starts with a tag: `[decision]` when the work is blocked or was done on an assumption, and the orchestrator must answer it or ask the user; `[approval]` for a command you did not run, with what it was for; `[unverified]` for something you could not verify, which goes into the consolidated report. Write `none` when there is nothing.
+
+For heavy-list work, or when the brief asks for a spec (see above), also add:
 
 ```
 ## Design notes
@@ -152,7 +155,7 @@ For a change that needs a spec (see above), also add:
 - Out of scope: <respected | violated — why>
 ```
 
-When the change adds or alters tested behavior, add one block per new test:
+When the brief asks for TDD, add one block per new test:
 
 ```
 ### TDD phases

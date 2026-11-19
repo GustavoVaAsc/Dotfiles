@@ -47,7 +47,7 @@ claude/
 | `kosmos.coder` and friends | `kosmos-coder` and friends (hyphens, as in the OpenCode port; Claude Code reserves `:` in names for plugins) |
 | `thinking: low / medium / high` | `effort` |
 | MiniMax-M3.1-Flash / MiniMax-M2.7 | `opus` for the orchestrator and the auditor, `sonnet` for the coder and the reviewer, `haiku` for the docs writer |
-| `turnBudget.maxTurns` | `maxTurns` |
+| no Pi equivalent (pi-subagents has no per-agent turn limit) | `maxTurns` |
 | `subagent({ ... })`, `workflow: "parallel"` | the `Agent` tool; independent children are several calls in one reply |
 | dispatch with `model: "...:high"` on a heavy-list task | `effort: "high"` on the `Agent` call |
 | `contact_supervisor` and `subagent_supervisor` | the child ends with `## Open questions`; the orchestrator asks the user, then resumes it with `SendMessage` |

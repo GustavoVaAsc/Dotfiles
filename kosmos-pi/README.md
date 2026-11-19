@@ -12,11 +12,20 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 |---|---|---|---|
 | `kosmos.coder` | MiniMax-M3.1-Flash | read/write, medium thinking | Implementation of any size: features, fixes, refactors, new modules, new public APIs |
 | `kosmos.code-reviewer` | MiniMax-M3.1-Flash | read-only, medium thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
-| `kosmos.security-auditor` | MiniMax-M3.1-Flash | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit |
+| `kosmos.security-auditor` | MiniMax-M3.1-Flash | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit, with an OSV lockfile scan and advisory lookup |
 | `kosmos.docs-writer` | MiniMax-M2.7 | read/write, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
-| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read/write, high thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)`; edits plans, docs and config inline when the change is small |
+| `kosmos.orchestrator` | MiniMax-M3.1-Flash | read/write, medium thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)`; edits plans, docs and config inline when the change is small |
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
+
+### Security auditor: network access
+
+The auditor reaches the network in two ways, and both are narrow:
+
+- **Lockfile scan.** The only scanner it may run without approval is `~/Dotfiles/bin/kosmos-osv-scan <lockfile>`, a wrapper from this Dotfiles repo. It takes exactly one lockfile inside the repo (a fixed list of file names), runs osv-scanner with call analysis off and a pinned empty config, and ignores the repo's own `osv-scanner.toml`. It sends the lockfile's package names and versions to OSV. Package-manager scanners (`npm audit`, `pip-audit`, `cargo audit`, ...) and other manifests go under `[approval]` for you to run. Outside this checkout the wrapper does not exist, so the scan is reported under `[approval]` too.
+- **Advisory pages.** It may fetch only advisory hosts (NVD, GitHub advisories, OSV, RustSec, PyPI, npmjs.com, and the vendor page a CVE or GHSA names).
+
+On Pi nothing enforces these rules: they are in the agent's prompt. Claude Code prompts for each fetch, and opencode enforces both with deny rules (and has no web search for this agent). A fetch is checked on its first URL only, so an allowed host can redirect it elsewhere; the prompt tells the agent to note the final host and treat an off-list page as untrusted.
 
 ### Skills (2 published, 1 local)
 
@@ -208,7 +217,7 @@ These agents were ported from OpenCode (`.config/opencode/agents/*.md`) to Pi's 
 | `mode: primary` (orchestrator) | Remains a subagent; only Pi parents can spawn. Orchestrator doc explains the parent-spawns-children model |
 | `temperature: 0.1` | `thinking: high` |
 | `temperature: 0.2-0.3` | `thinking: medium` |
-| `steps: N` | `turnBudget: { maxTurns: N, graceTurns: N/4 }` |
+| `steps: N` | Removed — pi-subagents has no per-agent turn limit (0.89.1 frontmatter has no such field) |
 | `permission.task: "agent": allow` | Removed for the coder — it has no `subagent` tool. `kosmos.orchestrator` keeps it and dispatches the specialists itself. |
 | `permission.question: allow` | Removed — no Pi equivalent for subagents |
 | `model: provider/X` | `model: X` (Pi uses `defaultProvider` from settings) |

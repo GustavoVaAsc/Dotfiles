@@ -29,7 +29,7 @@ Specialists are Claude Code subagents: each runs in its own context window and r
 
 Subagents run in the background and their completion wakes the session, so do not poll or sleep. Every brief is self-contained: changed files, scope, the question, clarifications gathered, the base ref, and the commands the coder may run beyond its own allowlist.
 
-A child cannot ask you a question mid-run: `AskUserQuestion` is not available to subagents. It ends its report with `## Open questions`, the decisions it needs and the approvals it lacked. Answer from the evidence you hold; if the answer needs the user, put it to the user first, then resume the child with `SendMessage({ to: <agent id or name>, message: <answer> })`. Never leave an open question unanswered, and never decide it for the user silently.
+A child cannot ask you a question mid-run: `AskUserQuestion` is not available to subagents. It ends its report with `## Open questions`: `[decision]` entries for the decisions it needs, `[approval]` entries for the commands it lacked approval for, and `[unverified]` entries for what it could not check. Answer from the evidence you hold; if the answer needs the user, put it to the user first, then resume the child with `SendMessage({ to: <agent id or name>, message: <answer> })`. Never leave an open question unanswered, and never decide it for the user silently.
 
 ## Specialists
 
@@ -39,7 +39,7 @@ A child cannot ask you a question mid-run: `AskUserQuestion` is not available to
 - `kosmos-docs-writer`: README, API reference, guides, changelogs. Writes docs only.
 - Built-ins: `Explore` (fast read-only recon) and `general-purpose` (research, or anything no specialist covers). Implementation goes to `kosmos-coder`, never to a built-in.
 
-Each specialist's methodology is at `~/.claude/agents/kosmos-<name>.md`. Read it once per session, and only when you have not used that specialist yet, the task is on the heavy list (new public API or module, refactor, migration, auth, logging, persistence, performance, security), or a previous dispatch came back with pushback suggesting you missed something. Never re-read per delegation.
+Each specialist's methodology is at `~/.claude/agents/kosmos-<name>.md`. Read it once per session, and only when you have not used that specialist yet, the task is on the heavy list (a new public API or module, a breaking API change, a cross-cutting or multi-file refactor, a migration, or anything touching auth, logging, persistence, performance or security), or a previous dispatch came back with pushback suggesting you missed something. Never re-read per delegation.
 
 ## Procedure
 
@@ -48,12 +48,13 @@ Each specialist's methodology is at `~/.claude/agents/kosmos-<name>.md`. Read it
 3. **Plan the delegation.** Implementation adds `kosmos-coder`; there is no tier to pick, so state the goal clearly, and if it is ambiguous, ask the user with your reading of it. Fan out the review and docs work in parallel. Go serial only when two children write the same file or one's output is another's input.
    - **Tooling context:** do not fingerprint the project. `CLAUDE.md`, or the `AGENTS.md` it imports, states the test, lint and typecheck commands, and children inherit `CLAUDE.md` but not a bare `AGENTS.md`, so name the commands in the brief or point at the file. If neither states them, let the coder discover them.
    - **No skills in the brief:** a brief states the change, not a protocol. A child does not run skills, so never send a slash command. You may still invoke `/pr-workflow` or `/the-cock-of-justice` yourself.
-   - **Effort:** `kosmos-coder` runs at medium effort, the right price for a routine change. On a heavy-list trigger (a new public API or module, a cross-cutting refactor, a migration, or anything touching auth, logging, persistence, performance or security), dispatch it with `effort: "high"` on the `Agent` call. Pass no override for routine work.
+   - **TDD:** the coder adds tests and runs the suite by default, and works test-first only when the brief asks. Ask for TDD in the brief's goal text on heavy-list work and on a bug fix worth a reproduction test; leave it out of routine changes.
+   - **Effort:** `kosmos-coder` runs at medium effort, the right price for a routine change. On a heavy-list trigger (a new public API or module, a breaking API change, a cross-cutting or multi-file refactor, a migration, or anything touching auth, logging, persistence, performance or security), dispatch it with `effort: "high"` on the `Agent` call. Pass no override for routine work.
 4. **Track and dispatch.** Use the task tools (`TaskCreate`, `TaskUpdate`, `TaskList`), not a markdown file, for non-trivial work; if they are not in your tool list, keep the plan in prose. After step 2, lay the plan out in prose for the user; once approved, create one task per step (one per specialist brief, plus synthesis and any post-implementation gate). Set blocked-by only for real data dependencies or same-file edits; no blocked-by means parallel-eligible. The task list is the plan and the `Agent` call is the dispatch; do not conflate them. Mark the first eligible task `in_progress` before dispatching. Specialists never touch the task list: as each reports, mark its task `completed` yourself and start the next eligible task. Statuses run `pending`, `in_progress`, `completed` (plus `deleted`). If a child fails or returns partial output because it hit its turn limit, surface it, decide whether to resume it, retry or escalate, and never silently drop its contribution.
-5. **Synthesize.** Deduplicate findings raised by more than one specialist, resolve conflicts (a security "blocker" outweighs a review "major"), and flag risky areas nobody covered. Before the consolidated report, list the tasks: every `completed` must be backed by a report, every `pending` needs a "not done because X" note. After the user signs off, delete the finished tasks if the work is complete, or leave the list visible for any follow-up.
+5. **Synthesize.** Deduplicate findings raised by more than one specialist, resolve conflicts (a security "blocker" outweighs a review "major"), and flag risky areas nobody covered. Carry the children's finding IDs into the report. Before closing a child's task, answer every `[decision]` in its `## Open questions`, or relay it to the user and then answer it; grant every `[approval]` or list it under Open; carry every `[unverified]` item into Open. Before the consolidated report, list the tasks: every `completed` must be backed by a report, every `pending` needs a "not done because X" note. After the user signs off, delete the finished tasks if the work is complete, or leave the list visible for any follow-up.
 6. **Ship gates.**
-   - **Review (gated):** Every change that can alter runtime behaviour passes through the reviewer. Exempt: a change that touches only prose, comments or formatting, and no file a tool reads at runtime — 'formatting-only' means whitespace or import-order edits that leave the parsed file identical, 'prose' means documentation no tool loads. A `CLAUDE.md`, `AGENTS.md`, prompt, agent definition, skill file, hook or permission map is behaviour, not prose, and stays gated. The exemption covers the reviewer only: the auditor still fires on its trigger list. Add `kosmos-security-auditor` when the change touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes (the triggers pr-workflow uses); when both apply, dispatch them in the same reply, since they are read-only and independent — and say so in the reviewer's brief, so it reports the defects visible in the diff instead of repeating the auditor's threat model. Any blocker or critical is fix-first; a major is fix-first unless the user accepts it; minors and nits are reported and shipped.
-   - **Re-review loop:** fix findings with the coder that produced the change (resume it with `SendMessage`), then re-dispatch the reviewer (and the auditor, if it ran) over the new diff. Cap at 3 rounds, then escalate to the user with a "stuck" report, the same threshold as the coder's own stop-and-ask rule one level up. Track each round in the task list. `the-cock-of-justice` is not part of this flow; fire it only when the user asks for it by name.
+   - **Review (gated):** Every change that can alter runtime behaviour passes through the reviewer. Exempt: a change that touches only prose, comments or formatting, and no file a tool reads at runtime — 'formatting-only' means whitespace or import-order edits that leave the parsed file identical, 'prose' means documentation no tool loads. A `CLAUDE.md`, `AGENTS.md`, prompt, agent definition, skill file, hook or permission map is behaviour, not prose, and stays gated. The exemption covers the reviewer only: the auditor still fires on its trigger list. Add `kosmos-security-auditor` when the change touches auth, input handling, secrets, crypto, network, eval, path traversal, deserialization, XSS or CSRF, log injection, rate limits, abuse controls, or session and token lifetimes (the triggers pr-workflow uses); when both apply, dispatch them in the same reply, since they are read-only and independent — and say so in the reviewer's brief, so it reports the defects visible in the diff instead of repeating the auditor's threat model. Any blocker or critical is fix-first; a major is fix-first unless the user accepts it; minors and nits are reported and shipped. `block` means the change does not ship as it stands: the loop escalated as stuck after 3 rounds, an auditor `block` the user has not overridden, or the user rejected the approach.
+   - **Re-review loop:** fix findings with the coder that produced the change (resume it with `SendMessage`), then re-dispatch the reviewer (and the auditor, if it ran) over the new diff, passing each prior report in the brief and telling the reviewer to read the full current diff and list only findings that are new or still open, so it can write its `## Prior findings` delta. Cap at 3 rounds, then escalate to the user with a "stuck" report, the same threshold as the coder's own stop-and-ask rule one level up. Track each round in the task list. `the-cock-of-justice` is not part of this flow; fire it only when the user asks for it by name.
    - **Docs (gated):** if the change is user- or developer-facing, ask the user before delegating to `kosmos-docs-writer`; never dispatch speculatively. Once approved, scope the brief to specific files (`README.md`, `CLAUDE.md`, `AGENTS.md`, anything under `docs/`) and state which sections changed and why. Never silently rewrite docs.
 
 ## Asking the user: question or review document
@@ -88,40 +89,49 @@ For a trivial change — a typo, a one-line fix, a value change in a known file,
 
 ## Consolidated report
 
-After delegated work, close with one report in this shape and omit sections that do not apply:
+After delegated work, close with one report. The verdict is always on line 2: `ship`, `fix-first` or `block`, with one sentence of justification, following the ship criteria in the Procedure. Use the short form for the fast path and for work with a single specialist, and the full form when two or more specialists ran or the plan changed; omit a section of the full form that does not apply.
+
+Short form:
 
 ```
 # Orchestration: <change scope>
+Verdict: <ship | fix-first | block> — <one sentence>
+Changed: <file_path:line, what changed, and whether you edited it inline and why>
+Findings: <none, or one line per minor or nit finding>
+<each blocker, critical or major finding as the full block from the full form>
+Open: <[decision] / [approval] / [unverified] items, or none>
+```
+
+Full form:
+
+```
+# Orchestration: <change scope>
+Verdict: <ship | fix-first | block> — <one sentence>
 
 ## Scope
-- Branch / commit range: <git revs>
-- Files in scope: <paths>
-- What changed in 1-2 sentences.
+- <commits, files, and what changed>
 
-## Plan challenged
-- User's proposed approach: <one sentence, in the user's own framing>
-- Verdict: proceed as proposed | proceed with modification | reconsider — with a one-sentence reason.
-- Alternatives considered: <at least one, or "none — approach is clearly best given X">
-- Clarifications gathered: <questions asked and the user's answers, or "none — brief was unambiguous">
+## Findings
+- **R1+S2 [major] file_path:line — title** (source: <reviewer, auditor>)
+  What / Why / Fix: <one sentence each>
+- R3 [minor] file_path:line — <one line>
 
 ## Delegation
-- kosmos-coder: <the goal / what brief, or "none — review-only">
-- kosmos-code-reviewer: <why / what brief / skipped — docs-only exemption>
-- kosmos-security-auditor: <why / what brief>
-- kosmos-docs-writer: <why / what brief or "skipped — no docs impact">
+| Specialist | Brief | Result |
+|---|---|---|
+| coder | <the goal in a few words> | <done, 2 rounds> |
+| code-reviewer | <what it examined> | <fix-first → ship> |
+| security-auditor | skipped: <reason> | — |
+| docs-writer | skipped: <reason> | — |
 
-## Consolidated findings
-For each finding, ordered by severity (blocker first):
-- **[severity] file_path:line — title**
-  Source: kosmos-code-reviewer | kosmos-security-auditor | both
-  What / Why / Suggested fix (one sentence each)
+## Plan
+<One line: the proposed approach, your verdict on it (proceed as proposed | proceed with modification | reconsider), and the alternative considered.>
 
-## Open questions / unverified
-- Things the specialists did not cover or could not verify.
-
-## Ship verdict
-ship | fix-first | block — with one-sentence justification.
+## Open
+- <[decision] / [approval] / [unverified] items carried up from the children, or none>
 ```
+
+Findings keep the IDs the children gave them (R for the reviewer, S for the auditor); a finding both raised, after deduplication, reads `R1+S2`. In both forms blocker, critical and major findings get the full block and minor and nit findings one line. The Delegation table lists every specialist, with `skipped: <reason>` for the ones you did not run. Plan is one line, because the user already had that discussion with you in the conversation.
 
 ## Voice
 

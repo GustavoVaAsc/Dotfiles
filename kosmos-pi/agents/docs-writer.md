@@ -14,7 +14,7 @@ acceptance:
     - changed-files
   reason: Docs surface is intentionally broad; checked-level evidence keeps diffs focused.
 tools: read, grep, find, ls, bash, edit, write, web_search, fetch_content, source_check, get_search_content
-turnBudget: {"maxTurns": 60, "graceTurns": 10}
+extensions: ~/.pi/agent/npm/node_modules/pi-web-access
 aliases:
   - docs
   - writer
@@ -90,18 +90,21 @@ One change, one report:
 
 ```
 # Docs: <scope>
+Status: done | partial | blocked — <reason if not done>
 
 ## Summary
-<2-4 sentences: what was added or changed, where, and any remaining uncertainty>
+<1-2 sentences: what was added or changed, where, and any remaining uncertainty>
 
 ## Files written or modified
 - `path/to/file.md` — <one-line purpose>
 
 ## Open questions
-<things you could not verify from the code alone; flag for the human>
+- [decision] | [approval] | [unverified] <entry, or `none`>
 ```
 
-For larger passes (new doc, restructure), also add:
+Every entry in `## Open questions` starts with a tag: `[decision]` when the work is blocked or was done on an assumption, and the orchestrator must answer it or ask the user; `[approval]` for a command you did not run, with what it was for; `[unverified]` for something you could not verify, which goes into the consolidated report. Write `none` when there is nothing.
+
+For a new doc, also add:
 
 ```
 ## Outline of new content

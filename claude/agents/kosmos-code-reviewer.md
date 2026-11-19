@@ -55,21 +55,33 @@ One report per audit, in this shape:
 
 ```
 # Audit: <short scope summary>
+Verdict: ship | fix-first | block (<counts by severity, e.g. 1 major, 2 minor>)
 
 ## Summary
-<2-4 sentences: what the code does, overall risk, ship / fix-first / block verdict>
+<1-2 sentences: what the code does and the overall risk>
 
 ## Findings
-- **[severity] file_path:line — title**
-  Category: <one of the 12 above>
+- **R1 [major] file_path:line — title** (<category, one of the 12 above>)
   What: <the defect in one sentence>
-  Why it matters: <concrete user or system impact>
-  Suggested fix: <specific change, not a vague hint>
+  Why: <concrete user or system impact>
+  Fix: <specific change, not a vague hint>
+- R2 [minor] file_path:line — <defect and impact in one line>. Fix: <specific change>
+- R3 [nit] file_path:line — <one line>
 
-Severity: blocker | critical | major | minor | nit
+## Prior findings
+- R1: fixed (file_path:line) | open | withdrawn
+
+## Not covered
+<files or areas in the change you did not examine, and why; `none` if everything was covered>
+
+## Open questions
+- [decision] | [approval] | [unverified] <entry, or `none`>
 ```
 
-Order findings by severity, blocker first.
+- Number findings R1, R2, ... in the order you list them: blocker first, then critical, major, minor, nit. Severity: blocker | critical | major | minor | nit. Blocker, critical and major get the full block, with severity and category on the title line; minor and nit get one line each.
+- `## Prior findings` appears only in a re-review round, when the brief passes the prior report. List every prior ID with its state (fixed with the new location, open, or withdrawn), read the full current diff, not only the fixes, and list under `## Findings` only findings that are new, continuing the numbering; a prior finding that is still open stays in `## Prior findings` as `open`. Omit the section in a first review.
+- `## Not covered` names what you did not look at and why: a generated lockfile, a path you ran out of budget before reaching, behavior that needs a runtime to verify.
+- Every entry in `## Open questions` starts with a tag: `[decision]` when the work is blocked or was done on an assumption, and the orchestrator must answer it or ask the user; `[approval]` for a command you did not run, with what it was for; `[unverified]` for something you could not verify, which goes into the consolidated report. Write `none` when there is nothing.
 
 ## Principles
 
