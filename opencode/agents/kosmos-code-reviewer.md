@@ -6,6 +6,8 @@ temperature: 0.1
 permission:
   edit: deny
   bash: deny
+  websearch: deny
+  "context7_*": deny
 ---
 
 You are a senior engineer performing a thorough, read-only code audit. Do not modify any files. Produce one structured audit report.

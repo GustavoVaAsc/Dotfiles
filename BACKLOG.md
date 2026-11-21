@@ -121,6 +121,29 @@ Open ideas:
 - **Generate the skill from one source** (item 5): the three skill copies are kept identical by hand today.
 - **Feed the memory system** (items 1 and 12): decisions answered in a review are good candidates for workstream memory and handoff notes.
 
+### 17. Researcher follow-ups
+
+Follow-ups from the `kosmos-researcher` v1. The design is in `docs/reviews/kosmos-researcher/doc.md`.
+
+**Status: researcher v1 built (uncommitted); follow-ups not started.**
+
+- **Evidence auditor.** A citation pass as a kosmos agent on all three CLIs: `kosmos-evidence-auditor` on Claude Code and OpenCode, `kosmos.evidence-auditor` on Pi. It checks each decision-relevant claim against its source. Deferred in v1, where the researcher verifies its own claims.
+- **context7 for the Pi researcher.** Not available yet. It needs a background launch and pi-mcp-adapter.
+- **Live checks.** Claude Code passed headless (`claude -p`, 2026-11-20). The write guard blocked traversal, out-of-project, `.claude/`, `CLAUDE.md` and uppercase-slug writes and allowed a valid report. The web hook approved the researcher's fetches, and the answers came from primary sources. The hook stayed scoped to the researcher: the parent's own `WebSearch` was still denied. Still pending:
+  - an interactive Claude Code check that the frontmatter hooks fire from the symlinked `~/Dotfiles/claude/agents/` (headless skips the workspace-trust dialog);
+  - the OpenCode smoke test;
+  - the Pi smoke test, which must confirm that a github.com fetch is refused, that no unguarded pi-web-access loads, and that the disabled built-ins are hidden.
+
+> **Needs more thought:** the evidence auditor's shape is not decided. Options are one pass per report, or one per decision-relevant finding.
+
+Accepted residual risks in v1:
+
+- OpenCode `webfetch` private-range denies are best-effort. Decimal and hex IP forms, DNS names that resolve to private addresses, and redirects get through.
+- context7 runs through `npx`, and there is no lockfile for its dependencies.
+- A trusted project's `.pi/settings.json` can override the Pi researcher's `extensions:` and drop the guard.
+- The OpenCode `edit` map does not deny mixed-case instruction-file names such as `Claude.md`. This matters only on case-insensitive filesystems.
+- The Claude researcher's web hook auto-approves WebFetch for any public-looking https hostname. It checks names by shape only and never resolves them, so an internal host on a public-looking domain is fetched without a prompt. Built-in denies cover `ts.net`, the RFC 6761 names and the common private suffixes. List your own internal domains in `~/.config/kosmos/research-deny-suffixes`.
+
 ## Considered, not now
 
 - **Prompt regression evals.** The workflow is still being evaluated through daily use. Writing evals now would lock in behaviours that may be removed later.

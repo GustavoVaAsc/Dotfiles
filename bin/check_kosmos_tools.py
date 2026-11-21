@@ -58,6 +58,14 @@ BUILTIN_TOOLS = {
     "evidence-auditor": ["read", "web_search", "fetch_content", "get_search_content", "source_check"],
 }
 
+# Wrapper extensions that register a provider's tools themselves: a guard that installs its
+# `tool_call` checks and then calls the provider package's default export with the same API object.
+# An `extensions` entry ending in one of these paths provides every tool of that package, so the
+# agent need not (and for fail-closed guards must not) list the package itself.
+PROVIDER_WRAPPERS = {
+    "pi-web-access": ("/kosmos-pi/guards/researcher-fetch-guard.ts",),
+}
+
 _UNSAFE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
@@ -111,6 +119,8 @@ def provider_listed(entries, pkg):
     """True when an `extensions` entry points at the provider package."""
     for entry in entries:
         entry = entry.rstrip("/")
+        if any(entry.endswith(wrapper) for wrapper in PROVIDER_WRAPPERS.get(pkg, ())):
+            return True
         if entry == f"npm:{pkg}" or entry.split("/")[-1] == pkg or f"/node_modules/{pkg}/" in entry + "/":
             return True
     return False
@@ -170,7 +180,9 @@ def check(settings_path, agents_dir, installed_dir=None):
         if not name or "tools" not in fm or fm["tools"] == ["inherit"]:
             continue
         runtime_name = f"{fm['package']}.{name}" if fm.get("package") else name
-        override = overrides.get(runtime_name, overrides.get(name, {}))
+        # pi-subagents applies `agentOverrides` to builtin agents only, so a packaged agent never
+        # inherits the override of a builtin with the same bare name (kosmos.researcher vs researcher).
+        override = overrides.get(runtime_name, {})
         if "extensions" in override and override["extensions"] is not False:
             extensions = override["extensions"]
         elif "extensions" in fm:
@@ -188,6 +200,10 @@ def check(settings_path, agents_dir, installed_dir=None):
             fm = parse_frontmatter(path.read_text(encoding="utf-8"))
             if fm.get("name") and any(t in TOOL_PROVIDER for t in fm.get("tools", [])):
                 builtins[fm["name"]] = fm["tools"]
+    # An override with `"disabled": true` (a boolean, exactly) hides the builtin from discovery, so it
+    # cannot run and needs no extensions. Overrides apply to builtins only: the packaged-agent loop
+    # above never looks at `disabled`.
+    builtins = {name: tools for name, tools in builtins.items() if overrides.get(name, {}).get("disabled") is not True}
     for name, tools in sorted(builtins.items()):
         override = overrides.get(name, {})
         extensions = override.get("extensions") or []

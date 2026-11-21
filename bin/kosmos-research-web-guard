@@ -1,0 +1,222 @@
+#!/usr/bin/env -S python3 -I
+"""kosmos-research-web-guard: PreToolUse hook that approves the researcher's own web tools.
+
+Wired by the second `hooks:` entry of claude/agents/kosmos-researcher.md. A subagent
+cannot answer a permission prompt, so without this its WebSearch, WebFetch and context7
+calls are denied. Approving them here, in a hook scoped to this one agent, grants nothing
+to any other agent: there is no settings-level allow.
+
+Input: the hook JSON on stdin (`tool_name`, `tool_input`, ...). Output on allow: exit 0 and
+the PreToolUse "allow" decision on stdout. Everything else exits 2 (the only exit code
+Claude Code treats as blocking; any other non-zero code lets the call through) with one
+line on stderr and nothing on stdout, including malformed JSON, a missing or mistyped
+field, an unexpected tool name and any unexpected error in this script.
+
+Allowed:
+- `WebSearch` with a non-empty string `query`. The query is policed by the researcher's
+  prompt (topic terms only); there is no mechanical filter.
+- `mcp__context7__resolve-library-id` and `mcp__context7__query-docs` with an object input.
+- `WebFetch` only when `tool_input.url` is a plain public `https://` URL:
+  - no whitespace, control characters or backslashes anywhere (parsers disagree on them);
+  - an authority of `host` or `host:443` only: no userinfo, no other port;
+  - a host of lowercase ASCII letters, digits and hyphens in dot-separated labels (so no
+    IPv6 brackets, percent-escapes, full-width digits or other spellings that a URL parser
+    would normalise into an IP), with at least two labels and no empty label (which also
+    rules out trailing-dot tricks);
+  - a last label that starts with a letter, so every IP literal is refused outright: dotted,
+    short (`127.1`), decimal, hex (`0x7f.0.0.1`) and octal forms all end in a number;
+  - not under a denied suffix (the host equals it or ends with `.` plus it): the built-in
+    `localhost`, `local`, `internal`, `localdomain`, `lan`, `home`, `corp`, `intranet`,
+    `arpa` and `ts.net` (Tailscale), the special-use names `test`, `example`, `invalid` and
+    `onion`, and the user's own suffixes (below).
+
+User deny file: `$XDG_CONFIG_HOME/kosmos/research-deny-suffixes` when XDG_CONFIG_HOME is a
+non-empty absolute path, else `$HOME/.config/kosmos/research-deny-suffixes`. Use it for
+internal names that only look public (a company host on a real domain, `fritz.box`). One
+suffix per line; `#` starts a comment; blank lines are ignored; one leading dot is tolerated;
+suffixes are lowercased and must be valid lowercase LDH labels. `corp.com` denies `corp.com`
+and `x.corp.com`, not `evilcorp.com`. A missing file adds nothing. A file that exists but is
+unreadable, not a regular file, over 16 KiB, not UTF-8 or has an invalid line blocks EVERY
+WebFetch (fail closed) with a message naming the file; the file is read for WebFetch only.
+This script never creates or writes it.
+
+This is best-effort, not a network boundary: it does no DNS resolution, so a public name
+that resolves to a private address (`127.0.0.1.nip.io`) is not caught, nor an intranet name
+on a real domain (a split-horizon company host) unless the deny file lists it, and neither
+are redirects (Claude Code's WebFetch returns a cross-host redirect to the model instead of
+following it, and the next fetch is checked here again).
+
+Parity: the fail-closed skeleton (input cap, duplicate-key rejection, JSON errors, the
+catch-all that exits 2) is duplicated from bin/kosmos-research-write-guard on purpose,
+because `python3 -I` cannot import a sibling module. Keep the two in step; the parity test
+in bin/test_kosmos_research_web_guard.py feeds both the same hostile inputs.
+"""
+import json
+import os
+import re
+import stat
+import sys
+
+BLOCK = 2
+MAX_INPUT = 16 * 1024 * 1024
+ALLOW = {
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "permissionDecisionReason": "kosmos-research-web-guard: a researcher web tool call",
+    }
+}
+OBJECT_TOOLS = {"mcp__context7__resolve-library-id", "mcp__context7__query-docs"}
+LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+DENIED_SUFFIXES = {"localhost", "local", "internal", "localdomain", "lan", "home", "corp", "intranet", "arpa",
+                   "ts.net", "test", "example", "invalid", "onion"}
+DENY_FILE_NAME = "research-deny-suffixes"
+MAX_DENY_FILE = 16 * 1024
+
+
+class Blocked(Exception):
+    pass
+
+
+def no_duplicate_keys(pairs):
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise Blocked("the hook input has a duplicate JSON key")
+    return dict(pairs)
+
+
+def deny_file_path():
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg and os.path.isabs(xdg):
+        return os.path.join(xdg, "kosmos", DENY_FILE_NAME)
+    home = os.environ.get("HOME")
+    if not home or not os.path.isabs(home):
+        raise Blocked("HOME is not set to an absolute path, so the user deny file (.config/kosmos/" + DENY_FILE_NAME + ") cannot be located")
+    return os.path.join(home, ".config", "kosmos", DENY_FILE_NAME)
+
+
+def load_user_suffixes():
+    """The user's extra denied suffixes. A missing file is empty; any other problem blocks every WebFetch."""
+    path = deny_file_path()
+    try:
+        # O_NONBLOCK so a FIFO at the path cannot hang the hook; no O_NOFOLLOW, since a symlink to a regular file is a valid setup.
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+    except FileNotFoundError:
+        if os.path.lexists(path):  # a dangling symlink must not silently drop the user's suffixes
+            raise Blocked(f"the deny file {ascii(path)} is a dangling symlink, so no WebFetch is approved") from None
+        return set()
+    except OSError as error:
+        raise Blocked(f"cannot read the deny file {ascii(path)} ({error.strerror or type(error).__name__}), so no WebFetch is approved") from None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Blocked(f"the deny file {ascii(path)} is not a regular file, so no WebFetch is approved")
+        chunks, size = [], 0
+        while size <= MAX_DENY_FILE:
+            chunk = os.read(fd, MAX_DENY_FILE + 1 - size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        data = b"".join(chunks)
+    except OSError as error:
+        raise Blocked(f"cannot read the deny file {ascii(path)} ({error.strerror or type(error).__name__}), so no WebFetch is approved") from None
+    finally:
+        os.close(fd)
+    if len(data) > MAX_DENY_FILE:
+        raise Blocked(f"the deny file {ascii(path)} is over {MAX_DENY_FILE} bytes, so no WebFetch is approved")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Blocked(f"the deny file {ascii(path)} is not UTF-8, so no WebFetch is approved") from None
+    suffixes = set()
+    for number, line in enumerate(text.splitlines(), 1):
+        raw = line.split("#", 1)[0]
+        if not raw.isascii():  # before lower(): U+212A (Kelvin sign) would become ASCII "k"
+            raise Blocked(f"line {number} of the deny file {ascii(path)} is not ASCII, so no WebFetch is approved")
+        entry = raw.strip().lower()
+        if not entry:
+            continue
+        if entry.startswith("."):
+            entry = entry[1:]
+        if not entry or len(entry) > 253 or not all(LABEL.fullmatch(label) for label in entry.split(".")):
+            raise Blocked(f"line {number} of the deny file {ascii(path)} is not a valid DNS suffix, so no WebFetch is approved")
+        suffixes.add(entry)
+    return suffixes
+
+
+def denied(host, suffixes):
+    return any(host == suffix or host.endswith("." + suffix) for suffix in suffixes)
+
+
+def check_url(url, user_suffixes):
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 or c == "\\" for c in url):
+        raise Blocked(f"the URL has whitespace, control characters or a backslash: {ascii(url)}")
+    if url[:8].lower() != "https://":
+        raise Blocked(f"only https URLs are allowed: {ascii(url)}")
+    rest = url[8:]
+    authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if "@" in authority:
+        raise Blocked(f"the URL has userinfo: {ascii(url)}")
+    host, sep, port = authority.rpartition(":") if ":" in authority else (authority, "", "")
+    if sep and port != "443":
+        raise Blocked(f"only port 443 is allowed: {ascii(url)}")
+    if not host.isascii():  # before lower(): U+212A (Kelvin sign) would become ASCII "k"
+        raise Blocked(f"the host is not plain ASCII (use punycode): {ascii(url)}")
+    host = host.lower()
+    if len(host) > 253 or not host:
+        raise Blocked(f"the URL has no usable host: {ascii(url)}")
+    labels = host.split(".")
+    if len(labels) < 2 or not all(LABEL.fullmatch(label) for label in labels):
+        raise Blocked(f"the host is not a dotted lowercase ASCII DNS name (IP literals, brackets, escapes, trailing dots and "
+                      f"single-label hosts are refused): {ascii(url)}")
+    if not labels[-1][0].isalpha():
+        raise Blocked(f"the last host label is numeric, which is an IP literal: {ascii(url)}")
+    if denied(host, DENIED_SUFFIXES):
+        raise Blocked(f"the host is under a denied suffix (local, private-use, internal or special-use): {ascii(url)}")
+    if denied(host, user_suffixes):
+        raise Blocked(f"the host is under a suffix in the user deny file {ascii(deny_file_path())}: {ascii(url)}")
+
+
+def check(payload):
+    if not isinstance(payload, dict):
+        raise Blocked("the hook input is not a JSON object")
+    tool = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if tool not in ("WebSearch", "WebFetch") and tool not in OBJECT_TOOLS:
+        raise Blocked(f"tool {ascii(tool)} is not a researcher web tool")
+    if not isinstance(tool_input, dict):
+        raise Blocked("tool_input is missing or not an object")
+    if tool == "WebSearch":
+        query = tool_input.get("query")
+        if not isinstance(query, str) or not query.strip():
+            raise Blocked("tool_input.query is missing or not a non-empty string")
+    elif tool == "WebFetch":
+        url = tool_input.get("url")
+        if not isinstance(url, str) or not url:
+            raise Blocked("tool_input.url is missing or not a non-empty string")
+        check_url(url, load_user_suffixes())
+
+
+def main():
+    data = sys.stdin.buffer.read(MAX_INPUT + 1)
+    if len(data) > MAX_INPUT:
+        raise Blocked("the hook input is too large")
+    try:
+        payload = json.loads(data.decode("utf-8"), object_pairs_hook=no_duplicate_keys)
+    except (UnicodeDecodeError, ValueError) as error:
+        raise Blocked(f"the hook input is not valid JSON: {error}") from None
+    check(payload)
+    print(json.dumps(ALLOW))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Blocked as error:
+        print(f"kosmos-research-web-guard: blocked. {error}.", file=sys.stderr)
+        sys.exit(BLOCK)
+    except BaseException as error:  # fail closed: a crash must not read as "allowed" (exit 1 is non-blocking)
+        try:
+            print(f"kosmos-research-web-guard: blocked. Internal error ({type(error).__name__}); failing closed.", file=sys.stderr)
+        finally:
+            os._exit(BLOCK)

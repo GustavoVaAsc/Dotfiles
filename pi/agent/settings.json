@@ -21,10 +21,10 @@
     "defaultExtensions": [],
     "agentOverrides": {
       "researcher": {
-        "extensions": ["~/.pi/agent/npm/node_modules/pi-web-access"]
+        "disabled": true
       },
       "evidence-auditor": {
-        "extensions": ["~/.pi/agent/npm/node_modules/pi-web-access"]
+        "disabled": true
       }
     }
   }

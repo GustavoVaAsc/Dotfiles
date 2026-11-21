@@ -1,0 +1,161 @@
+#!/usr/bin/env -S python3 -I
+"""kosmos-research-write-guard: PreToolUse hook that fences the researcher's `Write`.
+
+Wired by the `hooks:` block of claude/agents/kosmos-researcher.md. Claude Code
+agent frontmatter cannot path-scope `Write`, so this script is the fence.
+
+Input: the hook JSON on stdin (`tool_name`, `tool_input.file_path`, ...). The
+project root is the `CLAUDE_PROJECT_DIR` environment variable. The payload's
+`cwd` is NOT a fallback: it is not the project root (it can be a subdirectory
+or another worktree), and a guess here would widen the fence.
+
+Allow (exit 0, with the PreToolUse "allow" decision on stdout, so the Write
+needs no permission prompt) only when ALL of these hold:
+
+- `tool_name` is exactly `Write`;
+- `file_path` is an absolute, canonical path (no `.`, `//`, trailing `/`, `..`,
+  no control characters) of the form `<root>/docs/research/<slug>.md`, a direct
+  child of the research folder, with `<slug>.md` matching SLUG (lowercase) and
+  not an instruction-file name such as `CLAUDE.md` (RESERVED, any case);
+- no path component below the project root exists as a symlink (the target
+  itself included), and an existing target is a regular file with one link.
+
+Everything else is blocked with exit 2 and no stdout at all (never an allow
+decision). Exit 2 is the only code Claude Code treats as blocking: any other
+non-zero code lets the tool call through. Blocked cases include malformed
+JSON, a missing or mistyped field, an unexpected tool, an unset root and any
+unexpected error in this script. Do not add a code path that exits with
+another status.
+
+A symlink swapped in between this check and the write is not covered; the
+researcher has no tool that can create one.
+
+Parity: the fail-closed skeleton (input cap, duplicate-key rejection, JSON errors,
+the catch-all that exits 2) is duplicated in bin/kosmos-research-web-guard on
+purpose, because `python3 -I` cannot import a sibling module. Keep the two in
+step; the parity test in bin/test_kosmos_research_web_guard.py feeds both the
+same hostile inputs.
+"""
+import json
+import os
+import re
+import stat
+import sys
+
+BLOCK = 2
+ALLOW = {
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "permissionDecisionReason": "kosmos-research-write-guard: a report inside docs/research/",
+    }
+}
+MAX_INPUT = 16 * 1024 * 1024  # a report is far smaller; refuse rather than buffer without bound
+SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\.md")
+# Files Claude Code, OpenCode and other CLIs load as trusted instructions when they sit in a folder the
+# orchestrator later reads. SLUG already excludes most of these; the check is case-insensitive on purpose,
+# for case-insensitive filesystems and for a future loosening of SLUG.
+RESERVED = {"claude.md", "claude.local.md", "agents.md", "gemini.md", "context.md"}
+RESEARCH = ("docs", "research")
+
+
+class Blocked(Exception):
+    pass
+
+
+def has_control_chars(text):
+    return any(ord(c) < 32 or ord(c) == 127 for c in text)
+
+
+def no_duplicate_keys(pairs):
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise Blocked("the hook input has a duplicate JSON key")
+    return dict(pairs)
+
+
+def project_roots():
+    """The project root as given and as resolved. Either spelling of it may prefix the target."""
+    raw = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not raw:
+        raise Blocked("CLAUDE_PROJECT_DIR is not set, so there is no project root to fence against")
+    if has_control_chars(raw) or not os.path.isabs(raw) or ".." in raw.split("/"):
+        raise Blocked(f"CLAUDE_PROJECT_DIR is not an absolute path without '..': {ascii(raw)}")
+    given = os.path.normpath(raw)
+    if given in ("/", "//"):
+        raise Blocked("CLAUDE_PROJECT_DIR is the filesystem root")
+    return {given, os.path.realpath(given)}
+
+
+def check(payload):
+    if not isinstance(payload, dict):
+        raise Blocked("the hook input is not a JSON object")
+    tool = payload.get("tool_name")
+    if tool != "Write":
+        raise Blocked(f"tool {ascii(tool)} is not Write; this guard only admits Write")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        raise Blocked("tool_input is missing or not an object")
+    path = tool_input.get("file_path")
+    if not isinstance(path, str) or not path:
+        raise Blocked("tool_input.file_path is missing or not a non-empty string")
+    if has_control_chars(path):
+        raise Blocked(f"the path has control characters: {ascii(path)}")
+    if not path.startswith("/"):
+        raise Blocked(f"the path is not absolute: {ascii(path)}")
+    if ".." in path.split("/"):
+        raise Blocked(f"the path contains '..': {ascii(path)}")
+    if path != os.path.normpath(path):
+        raise Blocked(f"the path is not canonical (no '.', '//' or trailing '/'): {ascii(path)}")
+
+    roots = project_roots()
+    root = next((r for r in sorted(roots, key=len, reverse=True) if path.startswith(r + "/")), None)
+    if root is None:
+        raise Blocked(f"{ascii(path)} is outside the project root")
+    parts = path[len(root) + 1:].split("/")
+    if len(parts) != 3 or tuple(parts[:2]) != RESEARCH or not SLUG.fullmatch(parts[2]) or ".." in parts[2]:
+        raise Blocked(f"{ascii(path)} is not <project>/docs/research/<slug>.md "
+                      "(slug: lowercase letters, digits, '_' or '-', starting with a letter or digit, at most 64 characters before .md)")
+    if parts[2].lower() in RESERVED:
+        raise Blocked(f"{ascii(parts[2])} is a reserved instruction-file name")
+
+    current = root
+    for part in parts:
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            raise Blocked(f"{ascii(current)} is a symlink")
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise Blocked(f"cannot inspect {ascii(path)} ({error.strerror or type(error).__name__})") from None
+    if not stat.S_ISREG(info.st_mode):
+        raise Blocked(f"{ascii(path)} exists and is not a regular file")
+    if info.st_nlink != 1:
+        raise Blocked(f"{ascii(path)} is a hard link")
+
+
+def main():
+    data = sys.stdin.buffer.read(MAX_INPUT + 1)
+    if len(data) > MAX_INPUT:
+        raise Blocked("the hook input is too large")
+    try:
+        payload = json.loads(data.decode("utf-8"), object_pairs_hook=no_duplicate_keys)
+    except (UnicodeDecodeError, ValueError) as error:
+        raise Blocked(f"the hook input is not valid JSON: {error}") from None
+    check(payload)
+    print(json.dumps(ALLOW))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Blocked as error:
+        print(f"kosmos-research-write-guard: blocked. {error}. The researcher may write only <project>/docs/research/<slug>.md.", file=sys.stderr)
+        sys.exit(BLOCK)
+    except BaseException as error:  # fail closed: a crash must not read as "allowed" (exit 1 is non-blocking)
+        try:
+            print(f"kosmos-research-write-guard: blocked. Internal error ({type(error).__name__}); failing closed.", file=sys.stderr)
+        finally:
+            os._exit(BLOCK)

@@ -1,5 +1,6 @@
 """Fixture-based tests for check_kosmos_tools.py. Run: python3 -m unittest discover -s bin -p 'test_*.py'"""
 import contextlib
+import fnmatch
 import io
 import json
 import pathlib
@@ -11,6 +12,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_kosmos_tools as guard  # noqa: E402
 
 WEB = "~/.pi/agent/npm/node_modules/pi-web-access"
+GUARD = "~/.pi/agent/npm/node_modules/kosmos-pi/guards/researcher-fetch-guard.ts"
 GOOD_SETTINGS = {
     "subagents": {
         "defaultExtensions": [],
@@ -78,6 +80,27 @@ class GuardTest(unittest.TestCase):
         for entry in ["~/.pi/agent/npm/node_modules/pi-web-access-evil", "/x/pi-web-access/../other", "./other.ts"]:
             self.assertFalse(guard.provider_listed([entry], "pi-web-access"), entry)
 
+    def test_the_researcher_fetch_guard_provides_the_pi_web_access_tools(self):
+        for entry in [GUARD, "/home/x/Dotfiles/kosmos-pi/guards/researcher-fetch-guard.ts"]:
+            self.assertTrue(guard.provider_listed([entry], "pi-web-access"), entry)
+        for entry in ["/tmp/researcher-fetch-guard.ts", "~/.pi/agent/npm/node_modules/kosmos-pi/guards/other.ts",
+                      "~/.pi/agent/npm/node_modules/kosmos-pi/guards/researcher-fetch-guard.ts.bak",
+                      "~/.pi/agent/npm/node_modules/kosmos-pi/extensions/researcher-fetch-guard.ts"]:
+            self.assertFalse(guard.provider_listed([entry], "pi-web-access"), entry)
+        self.write("a.md", agent("a", ["read", "web_search", "fetch_content", "get_search_content", "source_check"], GUARD))
+        errors, *_ = self.run_check()
+        self.assertEqual(errors, [])
+
+    def test_a_builtin_override_does_not_mask_a_kosmos_agent_of_the_same_name(self):
+        # settings.json overrides the BUILTIN `researcher`; `kosmos.researcher` must stand on its own extensions.
+        self.write("r.md", agent("researcher", ["web_search"]))
+        errors, *_ = self.run_check()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("agent kosmos.researcher", errors[0])
+        self.write("r.md", agent("researcher", ["web_search"], GUARD))
+        errors, *_ = self.run_check()
+        self.assertEqual(errors, [])
+
     def test_override_beats_frontmatter(self):
         self.write("a.md", agent("a", ["web_search"], WEB))
         overrides = dict(GOOD_SETTINGS["subagents"]["agentOverrides"], **{"kosmos.a": {"extensions": []}})
@@ -91,6 +114,43 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("builtin agent evidence-auditor", errors[0])
         self.assertIn("agentOverrides.evidence-auditor.extensions", errors[0])
+
+    def test_a_disabled_builtin_is_not_checked(self):
+        settings = {"subagents": {"agentOverrides": {"researcher": {"disabled": True}, "evidence-auditor": {"disabled": True}}}}
+        errors, _, _, summary = self.run_check(settings)
+        self.assertEqual(errors, [])
+        self.assertIn("0 builtin overrides", summary)
+
+    def test_only_a_boolean_true_disables_a_builtin(self):
+        for disabled in [False, "true", 1, None, "yes", [], {}]:
+            settings = {"subagents": {"agentOverrides": {"researcher": {"disabled": disabled}, "evidence-auditor": {"extensions": [WEB]}}}}
+            errors, *_ = self.run_check(settings)
+            self.assertEqual(len(errors), 1, disabled)
+            self.assertIn("builtin agent researcher", errors[0])
+
+    def test_a_disabled_builtin_also_skips_installed_builtins_and_still_checks_others(self):
+        installed = self.root / "pi-subagents"
+        (installed / "agents").mkdir(parents=True)
+        (installed / "agents" / "web.md").write_text(agent("webby", ["read", "web_search"]).replace("package: kosmos\n", ""), encoding="utf-8")
+        overrides = {"researcher": {"disabled": True}, "evidence-auditor": {"disabled": True}, "webby": {"disabled": True}}
+        errors, *_ = self.run_check({"subagents": {"agentOverrides": overrides}}, installed=installed)
+        self.assertEqual(errors, [])
+        del overrides["webby"]
+        errors, *_ = self.run_check({"subagents": {"agentOverrides": overrides}}, installed=installed)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("builtin agent webby", errors[0])
+
+    def test_a_disabled_flag_does_not_hide_a_kosmos_agent(self):
+        # pi-subagents applies overrides to builtins only: kosmos.researcher still runs, so it is still checked.
+        self.write("r.md", agent("researcher", ["web_search"]))
+        settings = {"subagents": {"agentOverrides": {"researcher": {"disabled": True}, "kosmos.researcher": {"disabled": True},
+                                                     "evidence-auditor": {"disabled": True}}}}
+        errors, *_ = self.run_check(settings)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("agent kosmos.researcher", errors[0])
+        self.write("r.md", agent("researcher", ["web_search"], WEB))
+        errors, *_ = self.run_check(settings)
+        self.assertEqual(errors, [])
 
     def test_installed_scan_finds_new_builtin_and_ignores_builtins_without_provider_tools(self):
         installed = self.root / "pi-subagents"
@@ -134,6 +194,36 @@ class GuardTest(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parent.parent
         errors, *_ = guard.check(root / "pi/agent/settings.json", root / "kosmos-pi/agents")
         self.assertEqual(errors, [])
+
+
+class ResearcherShippingTest(unittest.TestCase):
+    """The Pi researcher loads the web tools only through the guard, and the guard file ships in the package."""
+
+    ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+    def extensions(self):
+        fm = guard.parse_frontmatter((self.ROOT / "kosmos-pi/agents/researcher.md").read_text(encoding="utf-8"))
+        return fm["extensions"]
+
+    def test_the_researcher_lists_only_the_guard_and_it_exists(self):
+        entries = self.extensions()
+        self.assertEqual(len(entries), 1, entries)
+        marker = "/kosmos-pi/guards/"
+        self.assertIn(marker, entries[0])
+        name = entries[0].split(marker, 1)[1]
+        self.assertRegex(name, r"^[a-z0-9-]+\.ts$")
+        self.assertTrue((self.ROOT / "kosmos-pi" / "guards" / name).is_file(), name)
+
+    def test_the_guard_is_shipped_by_package_json_files(self):
+        files = json.loads((self.ROOT / "kosmos-pi/package.json").read_text(encoding="utf-8"))["files"]
+        name = self.extensions()[0].split("/kosmos-pi/guards/", 1)[1]
+        relative = f"guards/{name}"
+        included = any(relative.startswith(f) if f.endswith("/") else fnmatch.fnmatch(relative, f)
+                       for f in files if not f.startswith("!"))
+        excluded = any(fnmatch.fnmatch(relative, f[1:]) or (f[1:].endswith("/") and relative.startswith(f[1:]))
+                       for f in files if f.startswith("!"))
+        self.assertTrue(included, files)
+        self.assertFalse(excluded, files)
 
 
 if __name__ == "__main__":

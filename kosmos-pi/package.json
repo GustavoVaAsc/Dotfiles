@@ -21,6 +21,8 @@
   },
   "files": [
     "agents/",
+    "guards/",
+    "!guards/*.test.mjs",
     "skills/",
     "!skills/artifact-review/",
     "README.md",

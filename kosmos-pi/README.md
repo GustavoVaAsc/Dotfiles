@@ -6,7 +6,7 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 
 ## What's inside
 
-### Agents (5)
+### Agents (6)
 
 | Agent | Model | Mode | Purpose |
 |---|---|---|---|
@@ -14,6 +14,7 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 | `kosmos.code-reviewer` | MiniMax-M3.1-Flash | read-only, medium thinking | 12-category audit (correctness, security, perf, reliability, concurrency, …) with severity-ranked findings |
 | `kosmos.security-auditor` | MiniMax-M3.1-Flash | read-only, medium thinking | 15-layer threat model + OWASP-focused security audit, with an OSV lockfile scan and advisory lookup |
 | `kosmos.docs-writer` | MiniMax-M2.7 | read/write, low thinking | READMEs, API refs, guides, tutorials, ADRs, changelogs |
+| `kosmos.researcher` | MiniMax-M3.1-Flash | web-only, read-only, medium thinking | Web research on libraries, APIs, standards, prior art and advisories. Searches and fetches only, never reads the repo; returns one cited report saved to the path the task sets |
 | `kosmos.orchestrator` | MiniMax-M3.1-Flash | read/write, medium thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)`; edits plans, docs and config inline when the change is small |
 
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
@@ -26,6 +27,22 @@ The auditor reaches the network in two ways, and both are narrow:
 - **Advisory pages.** It may fetch only advisory hosts (NVD, GitHub advisories, OSV, RustSec, PyPI, npmjs.com, and the vendor page a CVE or GHSA names).
 
 On Pi nothing enforces these rules: they are in the agent's prompt. Claude Code prompts for each fetch, and opencode enforces both with deny rules (and has no web search for this agent). A fetch is checked on its first URL only, so an allowed host can redirect it elsewhere; the prompt tells the agent to note the final host and treat an off-list page as untrusted.
+
+### Researcher: web only
+
+`kosmos.researcher` answers questions whose answer lives outside the repo. It has no tool that reads, searches or writes the repo, so the task must carry the non-secret codebase context it needs. Codebase questions go to `scout` or the Explore agent. The runtime saves the report to the output path the task sets (by convention `docs/research/<slug>.md`).
+
+Its web tools load only through `guards/researcher-fetch-guard.ts`, which wraps pi-web-access. The guard refuses these calls before pi-web-access runs them:
+
+| Refused | Why |
+|---|---|
+| `github.com`, `www.github.com` and `api.github.com` URLs | pi-web-access would fetch them through the user's logged-in `gh`, which can read private data |
+| URLs that are not `http` or `https`, including local paths and `file://` | a local file could be sent to a model provider |
+| the `auth` option, any non-empty `proxy`, `includeContent` and `fetchContent` | they skip the per-URL check, or the proxy address is never checked |
+
+If the guard does not load, the launch fails. context7 is not available to the Pi researcher yet.
+
+The kosmos settings in `pi/agent/settings.json` disable pi-subagents' built-in `researcher` and `evidence-auditor` (`subagents.agentOverrides`). The built-in agents loaded pi-web-access without the guard, and the built-in researcher could read the repo. Use `kosmos.researcher` instead. If you copy the settings file elsewhere, copy these overrides too.
 
 ### Skills (2 published, 1 local)
 
@@ -51,7 +68,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `ai-harness-install.sh` symlinks to `~/.config/mcp/`.
 5. Reports what changed. Safe to re-run.
 
-After running it, restart Pi. The 5 agents appear under `kosmos.*` and the skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`, plus `/skill:artifact-review` when installed from this repo (see above).
+After running it, restart Pi. The 6 agents appear under `kosmos.*` and the skills under `/skill:pr-workflow` and `/skill:the-cock-of-justice`, plus `/skill:artifact-review` when installed from this repo (see above).
 
 ### From npm (after publishing)
 
@@ -182,7 +199,10 @@ Dotfiles/
     │   ├── coder.md
     │   ├── code-reviewer.md
     │   ├── security-auditor.md
+    │   ├── researcher.md
     │   └── docs-writer.md
+    ├── guards/                # Extensions the researcher loads (shipped in the npm package)
+    │   └── researcher-fetch-guard.ts
     └── skills/               # Declared under pi.skills
         ├── pr-workflow/
         │   └── SKILL.md

@@ -31,6 +31,8 @@ permission:
     "docs/reviews/**": deny
   bash: deny
   webfetch: allow
+  websearch: allow
+  "context7_*": deny
 ---
 
 You are a senior technical writer embedded with the engineering team. Produce documentation that is accurate, navigable, and earns the reader's trust by saying only true things.

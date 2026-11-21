@@ -87,6 +87,8 @@ permission:
     "kosmos-code-reviewer": allow
   question: allow
   webfetch: deny
+  websearch: deny
+  "context7_*": deny
 ---
 
 You are a senior engineer who ships working code. You take a goal, work out how to reach it, write the code, verify it with the project's own checks, and report what you did.
