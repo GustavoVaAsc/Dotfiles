@@ -1,0 +1,33 @@
+{
+  "description": "MiniMax token plan: M3.1-Flash everywhere, M2.7 for docs (mirrors the agent frontmatter)",
+  "main": {
+    "model": "minimax/MiniMax-M3.1-Flash",
+    "thinking": "medium"
+  },
+  "agents": {
+    "kosmos.orchestrator": {
+      "model": "minimax/MiniMax-M3.1-Flash",
+      "thinking": "medium"
+    },
+    "kosmos.coder": {
+      "model": "minimax/MiniMax-M3.1-Flash",
+      "thinking": "medium"
+    },
+    "kosmos.code-reviewer": {
+      "model": "minimax/MiniMax-M3.1-Flash",
+      "thinking": "medium"
+    },
+    "kosmos.security-auditor": {
+      "model": "minimax/MiniMax-M3.1-Flash",
+      "thinking": "medium"
+    },
+    "kosmos.researcher": {
+      "model": "minimax/MiniMax-M3.1-Flash",
+      "thinking": "medium"
+    },
+    "kosmos.docs-writer": {
+      "model": "minimax/MiniMax-M2.7",
+      "thinking": "low"
+    }
+  }
+}

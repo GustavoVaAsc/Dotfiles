@@ -17,6 +17,8 @@ Originally converted from OpenCode agents into Pi's frontmatter format; see [Con
 | `kosmos.researcher` | MiniMax-M3.1-Flash | web-only, read-only, medium thinking | Web research on libraries, APIs, standards, prior art and advisories. Searches and fetches only, never reads the repo; returns one cited report saved to the path the task sets |
 | `kosmos.orchestrator` | MiniMax-M3.1-Flash | read/write, medium thinking | Senior tech-lead: challenges the plan, delegates implementation, fans out specialists in parallel via `subagent(...)`; edits plans, docs and config inline when the change is small |
 
+The Model column shows the frontmatter defaults, which match the `minimax` preset. Switch the models with `/preset` (see [Model presets](#model-presets-preset)).
+
 Runtime agent names are formed from the `package:` + `name:` frontmatter fields (`kosmos` + `coder` → `kosmos.coder`). Each agent file lives under `agents/` without a `kosmos-` prefix.
 
 ### Security auditor: network access
@@ -52,6 +54,105 @@ The kosmos settings in `pi/agent/settings.json` disable pi-subagents' built-in `
 | `the-cock-of-justice` | Dual-lens verdict (spec + quality reviewers in parallel) → ACCEPTED / WARNING / FAIL. Opt-in: fires only on an explicit request |
 | `artifact-review` | **Local Dotfiles installs only; not in the published npm package** (`files` excludes it, because it needs the `kosmos-review/` tool from this repo). Review loop for a long Markdown document: write it with embedded questions, serve it in a local browser page, read the submitted `round-N.json`, revise, repeat |
 
+## Model presets (`/preset`)
+
+`/preset` switches the model and thinking level of the main session and of every kosmos subagent with one name. The `minimax` preset is the default and matches the agent frontmatter.
+
+| Command | Effect |
+|---|---|
+| `/preset` | Lists the presets and marks the active one with `*` |
+| `/preset <name>` | Applies the preset. Tab completes names |
+| `/preset save <name>` | Saves the current setup as a preset. Prompts for an optional description before writing |
+| `/preset new <name>` | Builds a preset with pickers. Asks for the description, then a model and thinking level for the main session and for each agent |
+| `/preset delete <name>` | Deletes a preset after confirmation. Refuses the active preset |
+
+`save` records the main session's model and thinking level, plus each kosmos agent's model and thinking. An agent without an override is saved with its frontmatter value, so a saved preset always covers every agent. `new` offers only models that have credentials, and caps each thinking level at `subagents.maxThinking`. `save` and `new` check the thinking levels against that cap as well. Cancelling a prompt at any step saves nothing. Overwriting an existing name asks for confirmation first. After `save` or `new`, `/preset` offers to switch to the new preset.
+
+Applying a preset changes three things:
+
+| Where | What changes |
+|---|---|
+| Main session | `main.model` and `main.thinking` apply live |
+| `~/.pi/agent/settings.json` | `defaultProvider`, `defaultModel`, `defaultThinkingLevel` and `kosmosActivePreset` are written, so new sessions start on the preset |
+| `subagents.agentOverrides.<agent>` | `model` and `thinking` are merged into each agent the preset names. Other fields and entries are kept, including the `{"disabled": true}` overrides on `researcher` and `evidence-auditor` ([Researcher: web only](#researcher-web-only)) |
+
+Subagents use the new models from their next launch. A subagent that is already running keeps its old model. A project `.pi/settings.json` with `agentOverrides` still takes precedence over the user settings that `/preset` writes (see `pi/agent/extensions/preset.ts`, header comment).
+
+### Shipped presets
+
+The `minimax` preset (`pi/agent/presets/minimax.json`) uses the MiniMax provider:
+
+| Agent | Model | Thinking |
+|---|---|---|
+| main session | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.orchestrator` | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.coder` | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.code-reviewer` | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.security-auditor` | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.researcher` | `minimax/MiniMax-M3.1-Flash` | medium |
+| `kosmos.docs-writer` | `minimax/MiniMax-M2.7` | low |
+
+The `mimo` preset (`pi/agent/presets/mimo.json`) uses the `xiaomi-token-plan-sgp` provider. It runs the pro model for orchestration, review and audit, and the flash model for the rest:
+
+| Agent | Model | Thinking |
+|---|---|---|
+| main session | `xiaomi-token-plan-sgp/mimo-v2.6-flash` | medium |
+| `kosmos.orchestrator` | `xiaomi-token-plan-sgp/mimo-v2.6-pro` | medium |
+| `kosmos.code-reviewer` | `xiaomi-token-plan-sgp/mimo-v2.6-pro` | medium |
+| `kosmos.security-auditor` | `xiaomi-token-plan-sgp/mimo-v2.6-pro` | high |
+| `kosmos.coder` | `xiaomi-token-plan-sgp/mimo-v2.6-flash` | medium |
+| `kosmos.researcher` | `xiaomi-token-plan-sgp/mimo-v2.6-flash` | medium |
+| `kosmos.docs-writer` | `xiaomi-token-plan-sgp/mimo-v2.6-flash` | low |
+
+### Preset file format
+
+A preset is a JSON file named `<name>.json`. The name must match `^[a-z0-9][a-z0-9_-]{0,63}$`: lowercase letters, digits, `-` and `_`, at most 64 characters. The names `save`, `new` and `delete` are reserved for the subcommands and cannot be used. Files are limited to 64 KiB.
+
+```json
+{
+  "description": "Cheaper models for the review agents",
+  "main": { "model": "minimax/MiniMax-M3.1-Flash", "thinking": "medium" },
+  "agents": {
+    "kosmos.code-reviewer": { "model": "minimax/MiniMax-M2.7", "thinking": "low" }
+  }
+}
+```
+
+| Field | Required | Value |
+|---|---|---|
+| `description` | No | One line, at most 200 characters. Shown by `/preset` and Tab completion |
+| `main` | Yes | Object with `model` and `thinking` |
+| `main.model` | Yes | `provider/model-id` |
+| `main.thinking` | Yes | `off`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max` |
+| `agents` | No | Object keyed by agent runtime name (`kosmos.coder`, not `coder`) |
+| `agents.<name>.model` | One of `model` or `thinking` | `provider/model-id` |
+| `agents.<name>.thinking` | One of `model` or `thinking` | Same values as `main.thinking` |
+
+Unknown fields are rejected. A preset covers only the agents it names. An agent that the preset omits keeps the override from the previously applied preset, so list every agent a preset should control.
+
+### Where presets live
+
+Shipped presets live in the repo at `pi/agent/presets/`. `bin/install-kosmos-pi.sh` syncs them to `~/.pi/agent/presets/` with `rsync --delete`. The installer refuses to run when `~/.pi/agent/presets` is a symlink.
+
+`save` and `new` write the preset to two places:
+
+| Location | Survives an install | Notes |
+|---|---|---|
+| `<Dotfiles>/pi/agent/presets/<name>.json` | Yes | Versioned. It shows in `git status`, so commit it |
+| `~/.pi/agent/presets/<name>.json` | No | Works immediately |
+
+`<Dotfiles>` is the parent of the `file:<path>/kosmos-pi` entry in `packages` of `~/.pi/agent/settings.json`, which the installer writes. The repo copy is written only when that directory is a real directory that contains `pi/agent/settings.json`. Otherwise only the local copy is written, and `/preset` warns that the next install will delete it. A preset that exists only in `~/.pi/agent/presets/` is deleted on the next install, so add it to the repo.
+
+`delete` removes the preset from both locations. It refuses the active preset. If the repo copy was committed, `git checkout -- pi/agent/presets/<name>.json` restores it. An uncommitted repo copy cannot be restored this way.
+
+If a preset is invalid, names a model that is not in Pi's model registry, or names a model without credentials, `/preset` reports the error and changes nothing. The same applies when the settings write fails. A thinking level above `subagents.maxThinking` in `settings.json` is also refused.
+
+Re-running the installer copies the repo's `settings.json` over the live one. That removes `kosmosActivePreset` and the per-agent overrides, so run `/preset <name>` again after each install. `/preset` then shows `active: none` until you apply a preset.
+
+If a project's `agentOverridesByProvider` entry sets `disabled` to anything other than `true` for `researcher` or `evidence-auditor`, `/preset` refuses to apply, because the preset would otherwise hide that problem. Fix the setting first.
+
+The extension and presets ship from `pi/agent/` in this Dotfiles repo, not in the npm package. The `files` list in `kosmos-pi/package.json` covers `agents/`, `guards/`, `skills/`, `README.md` and `LICENSE` only.
+
 ## Install
 
 Run the install script once on each machine:
@@ -64,7 +165,7 @@ The script (see [`bin/install-kosmos-pi.sh`](./bin/install-kosmos-pi.sh) for the
 
 1. Installs the `kosmos-pi` npm package into `~/.pi/agent/npm/`.
 2. Adds `"file:<this repo>/kosmos-pi"` to `~/.pi/agent/settings.json` if not already present. The path is written by the installer, not stored in the repo, so the checked-in `settings.json` stays machine-independent.
-3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `mcp-adapter.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
+3. Syncs `~/Dotfiles/pi/agent/` → `~/.pi/agent/` (per-file/per-subtree rsync of `SYSTEM.md`, `settings.json`, `themes/`, `presets/`, `mcp-adapter.json` — leaves `npm/`, `agents/`, `sessions/`, etc. untouched).
 4. Removes `~/.pi/agent/mcp.json` if present. Pi's own MCP config is a second input to the MCP adapter on Pi 0.99+, so a stale copy there keeps deleted servers alive. The server list lives in `~/Dotfiles/mcp/mcp.json`, which the top-level `ai-harness-install.sh` symlinks to `~/.config/mcp/`.
 5. Reports what changed. Safe to re-run.
 

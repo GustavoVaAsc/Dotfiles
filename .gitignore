@@ -4,3 +4,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Temp files of an interrupted /preset save
+pi/agent/presets/.*.tmp

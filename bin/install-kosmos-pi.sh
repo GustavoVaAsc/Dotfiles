@@ -11,8 +11,8 @@
 #   1. Locates the kosmos-pi package relative to this script.
 #   2. Runs `npm install <pkg>` into ~/.pi/agent/npm/ (Pi's user package dir).
 #   3. Syncs ~/Dotfiles/pi/agent/ into ~/.pi/agent/ (SYSTEM.md, settings.json,
-#      themes/, extensions/, mcp-adapter.json). Scoped per-file/per-subtree so
-#      Pi's other state (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
+#      themes/, extensions/, presets/, mcp-adapter.json). Scoped per-file/per-subtree
+#      so Pi's other state (~/.pi/agent/npm/, agents/, sessions/, etc.) is preserved.
 #   4. Normalises ~/.pi/agent/settings.json: removes every stale `file:<path>`
 #      entry that points at the kosmos-pi package (path ends with `kosmos-pi`,
 #      with or without a trailing slash) and appends exactly one `file:$PKG_DIR`
@@ -39,6 +39,16 @@
 # Note: settings.json is deployed verbatim from Dotfiles and then normalised
 # in step 4, which means Pi-managed fields like `lastChangelogVersion` get
 # overwritten on each install. This is acceptable — Pi refreshes them on first run.
+# The same goes for what the /preset command (extensions/preset.ts) persists there:
+# the model defaults, `kosmosActivePreset` and the per-agent `model`/`thinking`
+# overrides. Re-running the installer puts the checked-in defaults back, so run
+# `/preset <name>` again afterwards to re-apply a preset. The preset files
+# themselves live in this repo, in pi/agent/presets/, and are synced to
+# ~/.pi/agent/presets/ with `rsync --delete`: a preset that exists only in
+# ~/.pi/agent/presets/ is deleted on install, so add new presets to the repo.
+# Dotfile temp files (`.*.tmp`) left by an interrupted `/preset save` are not synced.
+# The install refuses to run when ~/.pi/agent/presets is a symlink, so that the
+# `--delete` never reaches through it into another directory.
 #
 # Note: the per-file/per-subtree rsync scoping (rather than a whole-directory
 # rsync) is intentional. A naive `rsync -a --delete pi/agent/ ~/.pi/agent/`
@@ -96,6 +106,12 @@ fi
 
 mkdir -p "$PI_AGENT_DST/themes"
 mkdir -p "$PI_AGENT_DST/extensions"
+if [ -L "$PI_AGENT_DST/presets" ]; then
+	echo "error: $PI_AGENT_DST/presets is a symlink; refusing to sync presets through it (rsync --delete)." >&2
+	echo "  remove the link or point it at a real directory, then re-run." >&2
+	exit 1
+fi
+mkdir -p "$PI_AGENT_DST/presets"
 
 for entry in SYSTEM.md settings.json mcp-adapter.json; do
 	if [ ! -e "$PI_AGENT_SRC/$entry" ]; then
@@ -132,6 +148,13 @@ if rsync -a --delete "$PI_AGENT_SRC/extensions/" "$PI_AGENT_DST/extensions/" >/d
 	echo "  ✓ synced ~/.pi/agent/extensions/"
 else
 	echo "error: rsync failed for extensions/" >&2
+	exit 1
+fi
+
+if rsync -a --delete --exclude='.*.tmp' "$PI_AGENT_SRC/presets/" "$PI_AGENT_DST/presets/" >/dev/null 2>&1; then
+	echo "  ✓ synced ~/.pi/agent/presets/"
+else
+	echo "error: rsync failed for presets/" >&2
 	exit 1
 fi
 

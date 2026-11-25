@@ -1,0 +1,33 @@
+{
+  "description": "Xiaomi MiMo token plan (SGP): v2.6-pro for orchestrating, review and audit, v2.6-flash for the rest",
+  "main": {
+    "model": "xiaomi-token-plan-sgp/mimo-v2.6-flash",
+    "thinking": "medium"
+  },
+  "agents": {
+    "kosmos.orchestrator": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-pro",
+      "thinking": "medium"
+    },
+    "kosmos.code-reviewer": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-pro",
+      "thinking": "medium"
+    },
+    "kosmos.security-auditor": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-pro",
+      "thinking": "high"
+    },
+    "kosmos.coder": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-flash",
+      "thinking": "medium"
+    },
+    "kosmos.docs-writer": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-flash",
+      "thinking": "low"
+    },
+    "kosmos.researcher": {
+      "model": "xiaomi-token-plan-sgp/mimo-v2.6-flash",
+      "thinking": "medium"
+    }
+  }
+}
